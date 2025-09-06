@@ -1,0 +1,8 @@
+FROM raybnn_python_image_with_blas_fixed
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y gnupg2 ca-certificates apt-utils software-properties-common && \
+    apt-key adv --fetch-keys https://repo.arrayfire.com/GPG-PUB-KEY-ARRAYFIRE-2020.PUB && \
+    echo "deb [arch=amd64] https://repo.arrayfire.com/debian all main" | tee /etc/apt/sources.list.d/arrayfire.list && \
+    apt-get update && \
+    apt-get install -y arrayfire-cpu3-dev arrayfire-cpu3-openblas
