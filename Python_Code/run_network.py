@@ -4,16 +4,66 @@ import mnist
 import os 
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_recall_fscore_support
-
+from sklearn.datasets import fetch_openml
+from sklearn.datasets import load_iris as sklearn_load_iris
+from sklearn.model_selection import train_test_split
 
 def main():
 
+    ## Fashion-MNIST
 
-    #Load MNIST dataset
-    if os.path.isfile("./train-labels-idx1-ubyte.gz") == False:
-        mnist.init()
+    # def load_fashion_mnist():
+    #     X, y = fetch_openml('Fashion-MNIST', version=1, return_X_y=True, as_frame=False)
 
-    x_train, y_train, x_test, y_test = mnist.load()
+    #     x_train = X[:60000].reshape(-1, 28, 28)
+    #     y_train = y[:60000]
+    #     x_test = X[60000:].reshape(-1, 28, 28)
+    #     y_test = y[60000:]
+    #     return x_train, y_train, x_test, y_test
+    
+    # x_train, y_train, x_test, y_test = load_fashion_mnist()
+
+
+    ## MNIST
+    def load_mnist():
+        X, y = fetch_openml('mnist_784', version=1, return_X_y=True, as_frame=False)
+        X=X.astype(np.float32) / 255.0
+
+        x_train = X[:60000].reshape(-1, 28, 28)
+        y_train = y[:60000]
+        x_test = X[60000:].reshape(-1, 28, 28)
+        y_test = y[60000:]
+
+
+
+        return x_train, y_train, x_test, y_test
+
+    x_train, y_train, x_test, y_test = load_mnist()
+
+
+    ## IRIS
+    # def load_iris():
+    #     iris = sklearn_load_iris()
+    #     X = iris.data
+    #     y = iris.target
+
+    #     # Split into train/test (70/30)
+    #     x_train, x_test, y_train, y_test = train_test_split(X, y, 
+    #     test_size=0.3, random_state=42, stratify=y
+    # )
+    #     # Reshape (add batch dims and 4th dims)
+    #     # reshape to [features, samples, 1, 1]
+    #     x_train = x_train.T.reshape(4, -1, 1, 1)
+    #     x_test = x_test.T.reshape(4, -1, 1, 1)
+
+    #     x_train = x_train.astype(np.float32)
+    #     x_test = x_test.astype(np.float32)
+    #     y_train = y_train.astype(np.float32)
+    #     y_test = y_test.astype(np.float32)
+        
+    #     return x_train, y_train, x_test, y_test
+    
+    # x_train, y_train, x_test, y_test = load_iris()
 
 
     #Normalize MNIST dataset
@@ -24,10 +74,11 @@ def main():
     x_train = (x_train.astype(np.float32) - mean_value)/(max_value - min_value)
     x_test = (x_test.astype(np.float32) - mean_value)/(max_value - min_value)
 
-
-
+    print("x_train shape:", x_train.shape)
+    print("x_test shape:", x_test.shape)
 
     dir_path = "/tmp/"
+    # Parameter setting Fashion-MNIST and MNIST
 
     max_input_size = 784
     input_size = 784
@@ -35,31 +86,66 @@ def main():
     max_output_size = 10
     output_size = 10
 
-    max_neuron_size = 2000
+    max_neuron_size = 2000 #2000
 
     batch_size = 1000
     traj_size = 1
 
     proc_num = 2
-    active_size = 1000
+    active_size = 1000 # 1000
 
     training_samples = 60
     crossval_samples = 60
     testing_samples = 10
+
+    ## IRIS parameters setting
+
+    # max_input_size = 4
+    # input_size = 4
+
+    # max_output_size = 3
+    # output_size = 3
+
+    # max_neuron_size = 2000
+
+    # batch_size = 1000
+    # traj_size = 1
+
+    # proc_num = 2
+    # active_size = 1000
+
+    # training_samples = 105
+    # crossval_samples = 45
+    # testing_samples = 45
 
 
     #Format MNIST dataset
     train_x = np.zeros((input_size,batch_size,traj_size,training_samples)).astype(np.float32)
     train_y = np.zeros((output_size,batch_size,traj_size,training_samples)).astype(np.float32)
 
+    print("x_train shape: ",x_train.shape)
+    print("train_x shape: ",train_x.shape)
+
+    ## For Fashion-MNIST and MNIST dataset
     for i in range(x_train.shape[0]):
         j = (i % batch_size)
         k = int(i/batch_size)
 
-        train_x[:, j , 0, k ] = x_train[i,:]
+        train_x[:, j , 0, k ] = x_train[i,:].flatten()
 
-        idx = y_train[i]
+        idx = int(y_train[i])
         train_y[idx , j , 0, k ] = 1.0
+
+    # ## For IRIS dataset
+    # for i in range(x_train.shape[1]):
+    #     j = (i % batch_size)
+    #     k = int(i/batch_size)
+
+    #     train_x[:, j , 0, k ] = x_train[:, i].flatten()
+
+    #     idx = int(y_train[i])
+    #     train_y[idx , j , 0, k ] = 1.0
+
 
     crossval_x = np.copy(train_x)
     crossval_y = np.copy(train_y)
@@ -114,8 +200,12 @@ def main():
     exit_counter_threshold = 100000
     shuffle_counter_threshold = 200
 
+    # print("Train X shape: ", train_x.shape)
+    # print("Train Y shape: ", train_y.shape)
+    # print("Cross val X: ", crossval_x)
+    # print("Cross val Y: ", crossval_y)
 
-    #Train Neural Network
+    ######Train Neural Network
     arch_search = raybnn_python.train_network(
         train_x,
         train_y,
@@ -142,12 +232,22 @@ def main():
     )
 
     test_x = np.zeros((input_size,batch_size,traj_size,testing_samples)).astype(np.float32)
- 
+    
+    ## Test dataset for Fashion-MNIST and MNIST
     for i in range(x_test.shape[0]):
         j = (i % batch_size)
         k = int(i/batch_size)
 
-        test_x[:, j , 0, k ] = x_test[i,:]
+        test_x[:, j , 0, k ] = x_test[i, :].flatten()
+
+
+    # ## For IRIS dataset
+    # for i in range(x_test.shape[1]):
+    #     j = (i % batch_size)
+    #     k = int(i/batch_size)
+
+
+    #     test_x[:, j , 0, k ] = x_test[:, i].flatten()
 
     #Test Neural Network
     output_y = raybnn_python.test_network(
@@ -156,28 +256,45 @@ def main():
         arch_search
     )
 
-    print(output_y.shape)
+    #print("Test Y shape: ",output_y.shape)
 
+    # Pred for Fashion-MNIST and MNIST dataset
     pred = []
     for i in range(x_test.shape[0]):
         j = (i % batch_size)
         k = int(i/batch_size)
 
         sample = output_y[:, j , 0, k ]
-        print(sample)
+        #print(sample)
 
         pred.append(np.argmax(sample))
 
+    # # Pred for IRIS dataset
+    # pred = []
+    # for i in range(x_test.shape[1]):
+    #     j = (i % batch_size)
+    #     k = int(i/batch_size)
+
+    #     sample = output_y[:, j , 0, k ]
+    #     print(sample)
+
+    #     pred.append(np.argmax(sample))
+
+    y_test = y_test.astype(int)
+    pred = np.array(pred).astype(int)
+    # print("y_test types:", set(type(x) for x in y_test))
+
+    # print("pred types:", set(type(x) for x in pred))
 
     acc = accuracy_score(y_test, pred)
 
     ret = precision_recall_fscore_support(y_test, pred, average='macro')
 
-    print(acc)
-    print(ret)
+    # print(acc)
+    # print(ret)
 
 
-
+    print("Done without errors!")
 
 if __name__ == '__main__':
     main()
