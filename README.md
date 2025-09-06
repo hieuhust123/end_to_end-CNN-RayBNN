@@ -1,7 +1,7 @@
 # RayBNN_Python
 Python Bindings for Rust RayBNN
 
-
+This branch is used for testing of end-to-end model forward pass
 
 
 ```
