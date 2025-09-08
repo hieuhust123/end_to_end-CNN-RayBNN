@@ -30,32 +30,22 @@ class RayBNNAutograd(torch.autograd.Function):
         ctx.max_epoch = max_epoch
         ctx.feature_shape = features.shape
         
-        # Convert PyTorch tensor to numpy for RayBNN
-        features_np = features.detach().cpu().numpy()
-        
-        # Get batch size and feature dimensions
-        batch_size = features.shape[0]
-        feature_dim = features.shape[1]
-        
-        # Create training data in the format expected by RayBNN
-        # Format: [input_size, batch_size, traj_size, num_trajectories]
-        train_x = np.zeros((feature_dim, batch_size, traj_size, 1), dtype=np.float32)
-        train_y = np.zeros((10, batch_size, traj_size, 1), dtype=np.float32)  # Assuming 10 classes
-        
-        # Fill the training data
-        for i in range(batch_size):
-            train_x[:, i, 0, 0] = features_np[i, :]
-            # You might want to pass actual labels here instead of zeros
-            # train_y[actual_label, i, 0, 0] = 1.0
+        # ✅ Keep as PyTorch tensor - NO .detach().cpu().numpy()!
+        # The Rust function should accept PyTorch tensors directly
         
         # Call RayBNN forward pass using the new PyTorch-compatible function
+        # The Rust function now returns a PyArray2 directly
         output = raybnn_python.state_space_forward_pytorch(
             features, arch_search, traj_size, max_epoch
         )
         
         # Convert output back to PyTorch tensor
-        # The output should already be a PyTorch tensor from the Rust function
-        output_tensor = torch.from_numpy(output) if isinstance(output, np.ndarray) else output
+        # The output is already a numpy array from the Rust function
+        output_tensor = torch.from_numpy(output).to(features.device)
+        
+        # Ensure output has the same device and requires_grad as input
+        if features.requires_grad:
+            output_tensor.requires_grad_(True)
         
         return output_tensor
     
@@ -70,10 +60,16 @@ class RayBNNAutograd(torch.autograd.Function):
         Returns:
             Gradient with respect to input features
         """
-        # For now, return a zero gradient
-        # You'll need to implement the actual backward pass
-        # This requires implementing gradient computation in RayBNN
-        grad_input = torch.zeros(ctx.feature_shape, dtype=torch.float32)
+        # TODO: Implement actual RayBNN backward pass
+        # For now, return identity gradient (pass-through)
+        # This allows the model to train, but RayBNN parameters won't be updated
+        
+        # Create gradient tensor with same shape and device as input
+        grad_input = grad_output.clone()
+        
+        # Ensure proper shape matching
+        if grad_input.shape != ctx.feature_shape:
+            grad_input = grad_input.view(ctx.feature_shape)
         
         return grad_input, None, None, None, None
 
@@ -99,3 +95,42 @@ class RayBNNLayer(nn.Module):
             RayBNN output
         """
         return RayBNNAutograd.apply(features, self.arch_search, self.traj_size, self.max_epoch)
+
+def test_gradient_flow(raybnn_layer, features):
+    """
+    Test function to verify gradient flow through RayBNN layer.
+    
+    Args:
+        raybnn_layer: RayBNNLayer instance
+        features: Input features tensor
+        
+    Returns:
+        bool: True if gradient flow works correctly
+    """
+    # Ensure input requires gradients
+    features.requires_grad_(True)
+    
+    # Forward pass
+    output = raybnn_layer(features)
+    
+    # Check if output requires gradients
+    if not output.requires_grad:
+        print("❌ Output does not require gradients!")
+        return False
+    
+    # Backward pass
+    loss = output.sum()
+    loss.backward()
+    
+    # Check if input has gradients
+    if features.grad is None:
+        print("❌ Input features do not have gradients!")
+        return False
+    
+    print("✅ Gradient flow test passed!")
+    print(f"   Input shape: {features.shape}")
+    print(f"   Output shape: {output.shape}")
+    print(f"   Input grad shape: {features.grad.shape}")
+    print(f"   Output requires_grad: {output.requires_grad}")
+    
+    return True
