@@ -1,0 +1,368 @@
+
+
+******Network Information******
+neuron_size: 2000
+input_size: 784
+output_size: 10
+proc_num: 2
+active_size: 1795
+space_dims: 3
+step_num: 5000
+batch_size: 1000
+del_unused_neuron: true
+time_step: 0.1
+nratio: 0.5
+neuron_std: 0.001
+sphere_rad: 11.86445
+neuron_rad: 0.1
+con_rad: 9.190047
+init_prob: 0.01
+add_neuron_rate: 0
+del_neuron_rate: 0
+center_const: 0.005
+spring_const: 0.01
+repel_const: 0.01
+************
+
+
+WValues.dims()[0] 263005
+Start training
+[TRAIN_NETWORK_lib.rs] Input train X dims: [784, 1000, 1, 60]
+[TRAIN_NETWORK_lib.rs] Input train X first 50 elements in Rust ndarray: [-0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044]
+[TRAIN_NETWORK_lib.rs] Input train X HashMap size: 60
+[TRAIN_NETWORK_lib.rs] First trajectory (traj=0) first 10 elements: [-0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044]
+[TRAIN_NETWORK_lib.rs] Last trajectory (traj=59) first 10 elements: [-0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044, -0.13066044]
+train_network() being called!
+---- Start find_path_backward_group2() ----
+ 
+COO batch processing size: 5704
+|path_f32| Total active neurons: 1795 
+
+|path_f32| Current trajectory time step: 0 
+
+ Start main loop
+
+|path_f32| Processing timestep: 1 
+
+
+ ------------------- 
+
+ Start main loop
+
+|path_f32| Processing timestep: 0 
+
+
+ ------------------- 
+
+---- Start the backward pass ---- 
+
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [495, 10, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [10, 1000, 1, 1], af_array: 0x55e6adb8f640 }
+dJ/dX: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6adba0b80 }
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [1784, 495, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6adcc9750 }
+dJ/dX: Array { dtype: F32, shape: [1784, 1000, 1, 1], af_array: 0x55e6adcde740 }
+---- Start the backward pass ---- 
+
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [495, 10, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [10, 1000, 1, 1], af_array: 0x55e6adcdd320 }
+dJ/dX: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6adbc1350 }
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [1784, 495, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6adc301d0 }
+dJ/dX: Array { dtype: F32, shape: [1784, 1000, 1, 1], af_array: 0x55e6adcff5e0 }
+---- Start the backward pass ---- 
+
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [495, 10, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [10, 1000, 1, 1], af_array: 0x55e6add04fa0 }
+dJ/dX: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add055d0 }
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [1784, 495, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6adc30280 }
+dJ/dX: Array { dtype: F32, shape: [1784, 1000, 1, 1], af_array: 0x55e6adb8f640 }
+---- Start the backward pass ---- 
+
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [495, 10, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [10, 1000, 1, 1], af_array: 0x55e6add24160 }
+dJ/dX: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add06140 }
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [1784, 495, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add1e220 }
+dJ/dX: Array { dtype: F32, shape: [1784, 1000, 1, 1], af_array: 0x55e6add08660 }
+---- Start the backward pass ---- 
+
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [495, 10, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [10, 1000, 1, 1], af_array: 0x55e6add3e3a0 }
+dJ/dX: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add370f0 }
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [1784, 495, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6adc5add0 }
+dJ/dX: Array { dtype: F32, shape: [1784, 1000, 1, 1], af_array: 0x55e6add3e710 }
+---- Start the backward pass ---- 
+
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [495, 10, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [10, 1000, 1, 1], af_array: 0x55e6add55070 }
+dJ/dX: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add55800 }
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [1784, 495, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add57790 }
+dJ/dX: Array { dtype: F32, shape: [1784, 1000, 1, 1], af_array: 0x55e6add57690 }
+---- Start the backward pass ---- 
+
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [495, 10, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [10, 1000, 1, 1], af_array: 0x55e6add6fd10 }
+dJ/dX: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add704a0 }
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [1784, 495, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add6a720 }
+dJ/dX: Array { dtype: F32, shape: [1784, 1000, 1, 1], af_array: 0x55e6add575e0 }
+---- Start the backward pass ---- 
+
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [495, 10, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [10, 1000, 1, 1], af_array: 0x55e6add89130 }
+dJ/dX: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add898c0 }
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [1784, 495, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add8f5a0 }
+dJ/dX: Array { dtype: F32, shape: [1784, 1000, 1, 1], af_array: 0x55e6add8f280 }
+---- Start the backward pass ---- 
+
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [495, 10, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [10, 1000, 1, 1], af_array: 0x55e6adda4130 }
+dJ/dX: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6adda48c0 }
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [1784, 495, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add575e0 }
+dJ/dX: Array { dtype: F32, shape: [1784, 1000, 1, 1], af_array: 0x55e6addaa8a0 }
+---- Start the backward pass ---- 
+
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [495, 10, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [10, 1000, 1, 1], af_array: 0x55e6addc1480 }
+dJ/dX: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6addc1c10 }
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [1784, 495, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6addaa6c0 }
+dJ/dX: Array { dtype: F32, shape: [1784, 1000, 1, 1], af_array: 0x55e6addbfe90 }
+---- Start the backward pass ---- 
+
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [495, 10, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [10, 1000, 1, 1], af_array: 0x55e6adddefc0 }
+dJ/dX: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6adddf750 }
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+W shape: [1784, 495, 1, 1]
+dJ/dZ: Array { dtype: F32, shape: [495, 1000, 1, 1], af_array: 0x55e6add57950 }
+dJ/dX: Array { dtype: F32, shape: [1784, 1000, 1, 1], af_array: 0x55e6adddd730 }
+---- Start find_path_backward_group2() ----
+ 
+COO batch processing size: 5704
+|path_f32| Total active neurons: 1795 
+
+|path_f32| Current trajectory time step: 0 
+
+ Start main loop
+
+|path_f32| Processing timestep: 1 
+
+
+ ------------------- 
+
+ Start main loop
+
+|path_f32| Processing timestep: 0 
+
+
+ ------------------- 
+
+x_train shape: (60000, 28, 28)
+x_test shape: (10000, 28, 28)
+x_train shape:  (60000, 28, 28)
+train_x shape:  (784, 1000, 1, 60)
+Done without errors!
