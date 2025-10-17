@@ -1,6 +1,6 @@
 import numpy as np
 import raybnn_python
-import mnist
+
 import os 
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_recall_fscore_support
@@ -191,8 +191,8 @@ def main():
 
     loss_function = "sigmoid_cross_entropy_5"
 
-    max_epoch = 100000
-    stop_epoch = 100000
+    max_epoch = 10
+    stop_epoch = 10
     stop_train_loss = 0.005
 
     max_alpha = 0.01
