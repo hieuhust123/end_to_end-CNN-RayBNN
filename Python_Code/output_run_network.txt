@@ -1,0 +1,561 @@
+
+
+******Network Information******
+neuron_size: 2000
+input_size: 784
+output_size: 10
+proc_num: 2
+active_size: 1795
+space_dims: 3
+step_num: 5000
+batch_size: 1000
+del_unused_neuron: true
+time_step: 0.1
+nratio: 0.5
+neuron_std: 0.001
+sphere_rad: 11.86445
+neuron_rad: 0.1
+con_rad: 9.190047
+init_prob: 0.01
+add_neuron_rate: 0
+del_neuron_rate: 0
+center_const: 0.005
+spring_const: 0.01
+repel_const: 0.01
+************
+
+
+WValues.dims()[0]: 263005
+Start training
+[TRAIN_NETWORK_lib.rs] Input train X dims: [784, 1000, 1, 60]
+train_network() being called!
+---- Start find_path_backward_group2() ----
+ 
+COO batch processing size: 5704
+|path_f32| Total active neurons: 1795 
+
+|path_f32| Current trajectory time step: 0 
+
+ Start main loop
+
+|path_f32| Processing timestep: 1 
+
+idxsel shape: [10, 1, 1, 1]
+
+|path_f32| The index map 
+
+[PARAMS] Parameter index mappings of H: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a092067ef0 }} 
+
+[PARAMS] Parameter index mappings of A: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a092067e40 }} 
+
+[PARAMS] Parameter index mappings of B: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a092066450 }} 
+
+[PARAMS] Parameter index mappings of C: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a0920663a0 }} 
+
+[PARAMS] Parameter index mappings of D: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a0920662f0 }} 
+
+[PARAMS] Parameter index mappings of E: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a08697a750 }} 
+
+
+ ------------------- 
+
+[DERIVATIVES] Gradient parameter dA boundaries index: 0 -> 9 
+
+[DERIVATIVES] Gradient parameter dB boundaries index: 10 -> 19 
+
+[DERIVATIVES] Gradient parameter dC boundaries index: 20 -> 29 
+
+[DERIVATIVES] Gradient parameter dD boundaries index: 30 -> 39 
+
+[DERIVATIVES] Gradient parameter dE boundaries index: 40 -> 49 
+
+
+ ------------------- 
+
+[PARAMS] Combined parameter indices for all activation function parameters: {1: Array { dtype: S32, shape: [50, 1, 1, 1], af_array: 0x55a083b2eec0 }}
+|GRADIENTS| Input gradient index mappings: {1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a0868db490 }} 
+
+|SPARSE| Global weight indices for matrix operations: Array { dtype: U64, shape: [4950, 1, 1, 1], af_array: 0x55a0868db270 } 
+
+nrows_out: {1: 495} 
+
+[CSR] The HashMap of weight value: {1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a0965daca0 }} 
+
+[CSR] The HashMap of row indices value: {1: Array { dtype: S32, shape: [496, 1, 1, 1], af_array: 0x55a0965e5080 }} 
+
+[CSR] The HashMap of col indices value: {1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a0965e5130 }} 
+
+ Start main loop
+
+|path_f32| Processing timestep: 0 
+
+idxsel shape: [495, 1, 1, 1]
+
+|path_f32| The index map 
+
+[PARAMS] Parameter index mappings of H: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a086926740 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a092067ef0 }} 
+
+[PARAMS] Parameter index mappings of A: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a086a8a550 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a092067e40 }} 
+
+[PARAMS] Parameter index mappings of B: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a0920f7c70 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a092066450 }} 
+
+[PARAMS] Parameter index mappings of C: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a0920f7d20 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a0920663a0 }} 
+
+[PARAMS] Parameter index mappings of D: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a0842750c0 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a0920662f0 }} 
+
+[PARAMS] Parameter index mappings of E: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a0965e52f0 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a08697a750 }} 
+
+
+ ------------------- 
+
+[DERIVATIVES] Gradient parameter dA boundaries index: 0 -> 494 
+
+[DERIVATIVES] Gradient parameter dB boundaries index: 495 -> 989 
+
+[DERIVATIVES] Gradient parameter dC boundaries index: 990 -> 1484 
+
+[DERIVATIVES] Gradient parameter dD boundaries index: 1485 -> 1979 
+
+[DERIVATIVES] Gradient parameter dE boundaries index: 1980 -> 2474 
+
+
+ ------------------- 
+
+[PARAMS] Combined parameter indices for all activation function parameters: {0: Array { dtype: S32, shape: [2475, 1, 1, 1], af_array: 0x55a0965e6300 }, 1: Array { dtype: S32, shape: [50, 1, 1, 1], af_array: 0x55a083b2eec0 }}
+|GRADIENTS| Input gradient index mappings: {0: Array { dtype: S32, shape: [169319, 1, 1, 1], af_array: 0x55a0965ec620 }, 1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a0868db490 }} 
+
+|SPARSE| Global weight indices for matrix operations: Array { dtype: U64, shape: [169319, 1, 1, 1], af_array: 0x55a0965e9cf0 } 
+
+nrows_out: {0: 1784, 1: 495} 
+
+[CSR] The HashMap of weight value: {0: Array { dtype: S32, shape: [169319, 1, 1, 1], af_array: 0x55a0965ec400 }, 1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a0965daca0 }} 
+
+[CSR] The HashMap of row indices value: {0: Array { dtype: S32, shape: [1785, 1, 1, 1], af_array: 0x55a096614370 }, 1: Array { dtype: S32, shape: [496, 1, 1, 1], af_array: 0x55a0965e5080 }} 
+
+[CSR] The HashMap of col indices value: {0: Array { dtype: S32, shape: [169319, 1, 1, 1], af_array: 0x55a096614420 }, 1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a0965e5130 }} 
+
+
+ ---------------------- 
+
+---- Finished find_path_backward_group2() ----
+ 
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 1, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+---- Start the backward pass ---- 
+
+
+=== NEURON INDEX VERIFICATION ===
+Total active neurons: 1795
+Input size: 784
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+=== Time step 1 ===
+error.dims()[0] = 495
+input_size = 784
+nrows_out[&i] = 495
+dX.dims()[0] = 10
+Condition check: 495 >= 784? false
+SKIPPED: error array has only 495 rows, need at least 784
+SKIPPED at time step 1: error has 495 rows, need 784
+Gradient extraction: 0 extracted, 1 skipped
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+=== Time step 0 ===
+error.dims()[0] = 1784
+input_size = 784
+nrows_out[&i] = 1784
+dX.dims()[0] = 495
+Condition check: 1784 >= 784? true
+condition 1 NOTICE dJ/dX: Array { dtype: F32, shape: [784, 1000, 1, 1], af_array: 0x55a096f23670 }
+condition 3 NOTICE dJ/dX: Array { dtype: F32, shape: [784, 1000, 1, 1], af_array: 0x55a097060c90 }
+Gradient extraction: 1 extracted, 0 skipped
+FINISH backward pass! 
+
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 1, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+---- Start the backward pass ---- 
+
+
+=== NEURON INDEX VERIFICATION ===
+Total active neurons: 1795
+Input size: 784
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+=== Time step 1 ===
+error.dims()[0] = 495
+input_size = 784
+nrows_out[&i] = 495
+dX.dims()[0] = 10
+Condition check: 495 >= 784? false
+SKIPPED: error array has only 495 rows, need at least 784
+SKIPPED at time step 1: error has 495 rows, need 784
+Gradient extraction: 0 extracted, 1 skipped
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+=== Time step 0 ===
+error.dims()[0] = 1784
+input_size = 784
+nrows_out[&i] = 1784
+dX.dims()[0] = 495
+Condition check: 1784 >= 784? true
+condition 1 NOTICE dJ/dX: Array { dtype: F32, shape: [784, 1000, 1, 1], af_array: 0x55a096f46330 }
+condition 3 NOTICE dJ/dX: Array { dtype: F32, shape: [784, 1000, 1, 1], af_array: 0x55a097083890 }
+Gradient extraction: 1 extracted, 0 skipped
+FINISH backward pass! 
+
+Train loss: 0.001403194, alpha0: 0.001, i: 0
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 1, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+---- Start the backward pass ---- 
+
+
+=== NEURON INDEX VERIFICATION ===
+Total active neurons: 1795
+Input size: 784
+ Start main loop
+
+|network_f32| Timestep: 1 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [10, 1000, 1, 1]
+dJ/dUAF: [10, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+=== Time step 1 ===
+error.dims()[0] = 495
+input_size = 784
+nrows_out[&i] = 495
+dX.dims()[0] = 10
+Condition check: 495 >= 784? false
+SKIPPED: error array has only 495 rows, need at least 784
+SKIPPED at time step 1: error has 495 rows, need 784
+Gradient extraction: 0 extracted, 1 skipped
+ Start main loop
+
+|network_f32| Timestep: 0 
+
+Number of current active neurons: 1795
+dUAF/dZ shape: [495, 1000, 1, 1]
+dJ/dUAF: [495, 1000, 1, 1]
+----- traj_steps<1 --> Trigger condition 3 ---- 
+
+=== Time step 0 ===
+error.dims()[0] = 1784
+input_size = 784
+nrows_out[&i] = 1784
+dX.dims()[0] = 495
+Condition check: 1784 >= 784? true
+condition 1 NOTICE dJ/dX: Array { dtype: F32, shape: [784, 1000, 1, 1], af_array: 0x55a097087cc0 }
+condition 3 NOTICE dJ/dX: Array { dtype: F32, shape: [784, 1000, 1, 1], af_array: 0x55a097086f00 }
+Gradient extraction: 1 extracted, 0 skipped
+FINISH backward pass! 
+
+Train loss: 0.0041240095, alpha0: 0.001, i: 1
+---- Start find_path_backward_group2() ----
+ 
+COO batch processing size: 5704
+|path_f32| Total active neurons: 1795 
+
+|path_f32| Current trajectory time step: 0 
+
+ Start main loop
+
+|path_f32| Processing timestep: 1 
+
+idxsel shape: [10, 1, 1, 1]
+
+|path_f32| The index map 
+
+[PARAMS] Parameter index mappings of H: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a092197f00 }} 
+
+[PARAMS] Parameter index mappings of A: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a07d39b800 }} 
+
+[PARAMS] Parameter index mappings of B: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a08600ca70 }} 
+
+[PARAMS] Parameter index mappings of C: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a07d3b05b0 }} 
+
+[PARAMS] Parameter index mappings of D: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a07c59c9e0 }} 
+
+[PARAMS] Parameter index mappings of E: {1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a07c59af40 }} 
+
+
+ ------------------- 
+
+[DERIVATIVES] Gradient parameter dA boundaries index: 0 -> 9 
+
+[DERIVATIVES] Gradient parameter dB boundaries index: 10 -> 19 
+
+[DERIVATIVES] Gradient parameter dC boundaries index: 20 -> 29 
+
+[DERIVATIVES] Gradient parameter dD boundaries index: 30 -> 39 
+
+[DERIVATIVES] Gradient parameter dE boundaries index: 40 -> 49 
+
+
+ ------------------- 
+
+[PARAMS] Combined parameter indices for all activation function parameters: {1: Array { dtype: S32, shape: [50, 1, 1, 1], af_array: 0x55a0965ec620 }}
+|GRADIENTS| Input gradient index mappings: {1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a096f234e0 }} 
+
+|SPARSE| Global weight indices for matrix operations: Array { dtype: U64, shape: [4950, 1, 1, 1], af_array: 0x55a083b2eec0 } 
+
+nrows_out: {1: 495} 
+
+[CSR] The HashMap of weight value: {1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a07d1f32a0 }} 
+
+[CSR] The HashMap of row indices value: {1: Array { dtype: S32, shape: [496, 1, 1, 1], af_array: 0x55a096f0b840 }} 
+
+[CSR] The HashMap of col indices value: {1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a08615bb40 }} 
+
+ Start main loop
+
+|path_f32| Processing timestep: 0 
+
+idxsel shape: [495, 1, 1, 1]
+
+|path_f32| The index map 
+
+[PARAMS] Parameter index mappings of H: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a07c6f28b0 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a092197f00 }} 
+
+[PARAMS] Parameter index mappings of A: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a09705ee90 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a07d39b800 }} 
+
+[PARAMS] Parameter index mappings of B: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a096ee4240 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a08600ca70 }} 
+
+[PARAMS] Parameter index mappings of C: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a085087320 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a07d3b05b0 }} 
+
+[PARAMS] Parameter index mappings of D: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a09705dee0 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a07c59c9e0 }} 
+
+[PARAMS] Parameter index mappings of E: {0: Array { dtype: S32, shape: [495, 1, 1, 1], af_array: 0x55a086147230 }, 1: Array { dtype: S32, shape: [10, 1, 1, 1], af_array: 0x55a07c59af40 }} 
+
+
+ ------------------- 
+
+[DERIVATIVES] Gradient parameter dA boundaries index: 0 -> 494 
+
+[DERIVATIVES] Gradient parameter dB boundaries index: 495 -> 989 
+
+[DERIVATIVES] Gradient parameter dC boundaries index: 990 -> 1484 
+
+[DERIVATIVES] Gradient parameter dD boundaries index: 1485 -> 1979 
+
+[DERIVATIVES] Gradient parameter dE boundaries index: 1980 -> 2474 
+
+
+ ------------------- 
+
+[PARAMS] Combined parameter indices for all activation function parameters: {0: Array { dtype: S32, shape: [2475, 1, 1, 1], af_array: 0x55a0965e6af0 }, 1: Array { dtype: S32, shape: [50, 1, 1, 1], af_array: 0x55a0965ec620 }}
+|GRADIENTS| Input gradient index mappings: {0: Array { dtype: S32, shape: [169319, 1, 1, 1], af_array: 0x55a086a8a6f0 }, 1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a096f234e0 }} 
+
+|SPARSE| Global weight indices for matrix operations: Array { dtype: U64, shape: [169319, 1, 1, 1], af_array: 0x55a0841f6070 } 
+
+nrows_out: {0: 1784, 1: 495} 
+
+[CSR] The HashMap of weight value: {0: Array { dtype: S32, shape: [169319, 1, 1, 1], af_array: 0x55a0920665a0 }, 1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a07d1f32a0 }} 
+
+[CSR] The HashMap of row indices value: {0: Array { dtype: S32, shape: [1785, 1, 1, 1], af_array: 0x55a0842750c0 }, 1: Array { dtype: S32, shape: [496, 1, 1, 1], af_array: 0x55a096f0b840 }} 
+
+[CSR] The HashMap of col indices value: {0: Array { dtype: S32, shape: [169319, 1, 1, 1], af_array: 0x55a084275170 }, 1: Array { dtype: S32, shape: [4950, 1, 1, 1], af_array: 0x55a08615bb40 }} 
+
+
+ ---------------------- 
+
+---- Finished find_path_backward_group2() ----
+ 
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 2, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+Epoch 0: Test loss = 0.000017969438
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 2, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+Epoch 1: Test loss = 0.000018072975
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 2, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+Epoch 2: Test loss = 0.00001807009
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 2, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+Epoch 3: Test loss = 0.00001824367
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 2, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+Epoch 4: Test loss = 0.000018322411
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 2, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+Epoch 5: Test loss = 0.000019220266
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 2, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+Epoch 6: Test loss = 0.000019669009
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 2, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+Epoch 7: Test loss = 0.000020743364
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 2, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+Epoch 8: Test loss = 0.000020508432
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [2000, 1000, 1, 1]
+Input will be placed at rows 0 to 783
+
+=== Time step 0: Verifying input placement ===
+S shape: [2000, 1000, 1, 1]
+Input rows shape: [784, 1000, 1, 1]
+X shape: [784, 1000, 2, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+Epoch 9: Test loss = 0.00002013728
+x_train shape: (60000, 28, 28)
+x_test shape: (10000, 28, 28)
+x_train shape:  (60000, 28, 28)
+train_x shape:  (784, 1000, 1, 60)
+Accuracy:  0.2932
+Precision:  0.3835161579952731
+Recall:  0.2790375471048071
+F Score:  0.1975506777132089
+Support:  None
+Done without errors!

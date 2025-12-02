@@ -1,0 +1,133 @@
+
+
+******Network Information******
+neuron_size: 5000
+input_size: 200
+output_size: 10
+proc_num: 2
+active_size: 2692
+space_dims: 3
+step_num: 5000
+batch_size: 1000
+del_unused_neuron: true
+time_step: 0.1
+nratio: 0.5
+neuron_std: 0.001
+sphere_rad: 16.12828
+neuron_rad: 0.1
+con_rad: 12.472813
+init_prob: 0.01
+add_neuron_rate: 0
+del_neuron_rate: 0
+center_const: 0.005
+spring_const: 0.01
+repel_const: 0.01
+************
+
+
+WValues.dims()[0]: 915172
+trajectory size: 1
+x_train_shape: [200, 1000, 1, 60]
+x_input_ndarray shape: [200, 1000, 1, 60]
+
+y_input_ndarray shape: [10, 1000, 1, 60]
+
+[Forward pass function PyO3] Input train Y first 50 elements in Rust ndarray: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+[Forward pass function PyO3] Input arrayfire training shape: [200, 1000, 1, 1]
+[Forward pass function PyO3] Output arrayfire training shape: [10, 1000, 1, 1]
+
+=== FORWARD PASS STRUCTURE VERIFICATION ===
+S initial shape: [5000, 1000, 1, 1]
+Input will be placed at rows 0 to 199
+
+=== Time step 0: Verifying input placement ===
+S shape: [5000, 1000, 1, 1]
+Input rows shape: [200, 1000, 1, 1]
+X shape: [200, 1000, 1, 1]
+✓ Input dimensions match
+FINISH forward pass! 
+
+x_train shape: (60000, 28, 28)
+y_train shape: (60000,)
+x_test shape: (10000, 28, 28)
+y_test shape: (10000,)
+x_train_tensor:  torch.Size([60000, 1, 28, 28])
+y_train_tensor:  torch.Size([60000])
+x train shape:  torch.Size([60000, 1, 28, 28])
+y train shape:  torch.Size([60000])
+=== Initial CNN Parameters ===
+conv1.weight: mean=-0.018047, std=0.202815
+conv1.bias: mean=0.026476, std=0.197920
+conv2.weight: mean=0.003512, std=0.054619
+conv2.bias: mean=0.034701, std=0.035367
+conv3.weight: mean=-0.000607, std=0.056017
+conv3.bias: mean=-0.014978, std=0.059961
+projection.weight: mean=-0.000029, std=0.016827
+projection.bias: mean=-0.000298, std=0.017536
+
+============================================================
+TEST 6: RayBNN Parameter Check after extracted from Rust side
+============================================================
+RayBNN network_params type: <class 'dict'>
+RayBNN network_params keys: dict_keys(['dtype', 'shape', 'data'])
+  Dict keys: ['dtype', 'shape', 'data']
+    Found key 'data', type: <class 'list'>
+    ✓ Converted list/tuple from 'data' to numpy array
+✓ Successfully extracted RayBNN network_params
+RayBNN network_params shape: (945172,)
+RayBNN network_params mean: -4.543030e-06
+RayBNN network_params std: 1.028857e-01
+RayBNN network_params min: -1.000000e+00
+RayBNN network_params max: 1.000000e+00
+
+Will check if RayBNN parameters change after training...
+============================================================
+
+
+==================================================
+ENHANCED TRAINING: 5 epochs, batch_size=1000
+==================================================
+
+EPOCH 1/5
+------------------------------------------------------------
+After conv1 + pool + ReLu:  torch.Size([1000, 12, 14, 14])
+After conv2 + pool + ReLU:  torch.Size([1000, 12, 7, 7])
+After conv3 + drop + ReLU:  torch.Size([1000, 24, 7, 7])
+After dropout:  torch.Size([1000, 24, 7, 7])
+After flattening:  torch.Size([1000, 1176])
+After projection:  torch.Size([1000, 200])
+train X shape:  (200, 1000, 1, 60)
+return of RayBNN forward pass:  <class 'numpy.ndarray'>
+Reshaped Yhat:  torch.Size([1000, 10])
+
+============================================================
+TEST 4: RayBNN Output 
+
+
+Output shape: torch.Size([1000, 10])
+Output range: [-0.004985, 0.005858]
+Output mean: 0.000533
+Output std: 0.001499
+Unique predicted classes: 10 / 10
+✓ Good diversity: 10 different classes predicted
+Class distribution: [113, 86, 99, 96, 73, 107, 102, 128, 98, 98]
+probs: tensor([[0.1002, 0.0998, 0.1001,  ..., 0.0999, 0.0999, 0.1002],
+        [0.1001, 0.0999, 0.1002,  ..., 0.1000, 0.0998, 0.1001],
+        [0.0999, 0.1002, 0.0999,  ..., 0.0999, 0.1000, 0.1001],
+        ...,
+        [0.1001, 0.0998, 0.1000,  ..., 0.1000, 0.0999, 0.1000],
+        [0.1001, 0.0999, 0.1000,  ..., 0.1001, 0.1000, 0.1002],
+        [0.1000, 0.1000, 0.0999,  ..., 0.1001, 0.1000, 0.1000]])
+Output entropy: 2.302584 (max possible: 2.302585)
+✓ Good entropy: Outputs have reasonable diversity
+✓ Output values are valid (no NaN/Inf/zeros)
+
+Sample outputs (first 5 samples):
+  Sample 0: predicted=9, confidence=0.100, true_label=5
+  Sample 1: predicted=2, confidence=0.100, true_label=0
+  Sample 2: predicted=1, confidence=0.100, true_label=4
+  Sample 3: predicted=8, confidence=0.100, true_label=1
+  Sample 4: predicted=5, confidence=0.100, true_label=9
+============================================================
+
+output shape:  torch.Size([1000, 10])

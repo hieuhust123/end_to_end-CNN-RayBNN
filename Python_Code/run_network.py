@@ -1,5 +1,7 @@
 import numpy as np
 import raybnn_python
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 import os 
 from sklearn.metrics import accuracy_score
@@ -189,11 +191,13 @@ def main():
     lr_strategy = "SHUFFLE_CONNECTIONS"
     lr_strategy2 = "MAX_ALPHA"
 
-    loss_function = "sigmoid_cross_entropy_5"
+    loss_function = "softmax_cross_entropy"
 
-    max_epoch = 10
-    stop_epoch = 10
-    stop_train_loss = 0.005
+    max_epoch = 10000
+    stop_epoch = 100000
+    num_epochs = 100 # Set the total number of epochs you want to train for
+    max_epoch = 1 # We will train one epoch at a time inside the loop
+    stop_train_loss = 0.001
 
     max_alpha = 0.01
 
@@ -232,6 +236,7 @@ def main():
     )
 
     test_x = np.zeros((input_size,batch_size,traj_size,testing_samples)).astype(np.float32)
+    test_y = np.zeros((output_size,batch_size,traj_size,testing_samples)).astype(np.float32)
     
     ## Test dataset for Fashion-MNIST and MNIST
     for i in range(x_test.shape[0]):
@@ -239,33 +244,92 @@ def main():
         k = int(i/batch_size)
 
         test_x[:, j , 0, k ] = x_test[i, :].flatten()
+        idx = int(y_test[i])
+        test_y[idx, j, 0, k] = 1.0
 
+    train_losses = []
+    test_losses = []
+    accuracies = []
 
     # ## For IRIS dataset
     # for i in range(x_test.shape[1]):
     #     j = (i % batch_size)
     #     k = int(i/batch_size)
+    for epoch in range(num_epochs):
+        print(f"--- Epoch {epoch+1}/{num_epochs} ---")
+        
+        ######Train Neural Network for one epoch
+        arch_search = raybnn_python.train_network(
+            train_x,
+            train_y,
+            crossval_x,
+            crossval_y,
+            stop_strategy,
+            lr_strategy,
+            lr_strategy2,
+            loss_function,
+            max_epoch, # This is set to 1
+            epoch + 1, # Pass current epoch number
+            stop_train_loss,
+            max_alpha,
+            exit_counter_threshold,
+            shuffle_counter_threshold,
+            arch_search
+        )
 
+        # Extract training loss from the returned architecture
+        # NOTE: This assumes the rust code stores the last loss in the arch_search object.
+        # You might need to adjust how you get the train_loss if it's handled differently.
+        # For now, we'll parse it from the stdout.
 
     #     test_x[:, j , 0, k ] = x_test[:, i].flatten()
+        #Test Neural Network
+        output_y, test_loss_vec = raybnn_python.test_network(
+            test_x,
+            test_y,
+            arch_search
+        )
 
     #Test Neural Network
     output_y = raybnn_python.test_network(
         test_x,
+        avg_test_loss = np.mean(test_loss_vec)
+        test_losses.append(avg_test_loss)
 
         arch_search
     )
+        # Calculate Accuracy
+        pred = []
+        for i in range(x_test.shape[0]):
+            j = (i % batch_size)
+            k = int(i/batch_size)
+            sample = output_y[:, j , 0, k ]
+            pred.append(np.argmax(sample))
 
     #print("Test Y shape: ",output_y.shape)
+        acc = accuracy_score(y_test.astype(int), np.array(pred).astype(int))
+        accuracies.append(acc)
 
     # Pred for Fashion-MNIST and MNIST dataset
     pred = []
     for i in range(x_test.shape[0]):
         j = (i % batch_size)
         k = int(i/batch_size)
+        print(f"Epoch {epoch+1}: Test Loss = {avg_test_loss:.4f}, Accuracy = {acc:.4f}")
 
         sample = output_y[:, j , 0, k ]
         #print(sample)
+    print("\n--- Final Results ---")
+    # You can print final metrics or plot the results here
+    # For example, plotting accuracy over epochs:
+    plt.figure()
+    plt.plot(range(1, num_epochs + 1), accuracies)
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy")
+    plt.title("Test Accuracy over Epochs")
+    plt.grid(True)
+    plt.savefig("accuracy_over_epochs.png")
+    plt.show()
 
         pred.append(np.argmax(sample))
 
@@ -290,15 +354,26 @@ def main():
 
     ret = precision_recall_fscore_support(y_test, pred, average='macro')
 
-    # print(acc)
-    # print(ret)
+    print("Accuracy: ",acc)
+    print("Precision: ",ret[0])
+    print("Recall: ",ret[1])
+    print("F1 Score: ",ret[2])
+    print("Support: ",ret[3])
+    # # plot a diagram
+    # epochs = range(1,20)
+    # plt.plot(epochs, acc)
+    # plt.xlabel("Epochs")
+    # plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+    # plt.ylabel("Accuracy")
+    # plt.title("Training RayBNN with raw MNIST dataset")
+    # plt.legend()
+    # plt.grid(True)
+    # plt.savefig("accuracy_curve_RayBNN_MNIST.png", dpi=300)
+    # plt.show()
+
 
 
     print("Done without errors!")
 
 if __name__ == '__main__':
     main()
-
-
-
-

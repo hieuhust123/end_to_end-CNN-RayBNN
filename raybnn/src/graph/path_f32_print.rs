@@ -203,16 +203,15 @@ pub fn find_path_backward_group2(
 
         idxsel = newidxsel.clone(); // = 3
         idxsel_out.insert(i, idxsel.clone());
-        //af_print!("|path_f32| Target output neurons indices:", idxsel);
-        println!("idxsel shape: {:?}", idxsel.dims());
+        af_print!("|path_f32| Target output neurons indices:", idxsel);
 
-        // println!("\n|path_f32| The offset value: \n");
-        // println!("|path_f32| H parameters start at: {:?} \n", Hoffset);
-        // println!("|path_f32| A parameters start at: {:?} \n", Aoffset);
-        // println!("|path_f32| B parameters start at: {:?} \n", Boffset);
-        // println!("|path_f32| C parameters start at: {:?} \n", Coffset);
-        // println!("|path_f32| D parameters start at: {:?} \n", Doffset);
-        // println!("|path_f32| E parameters start at: {:?} \n", Eoffset);
+        println!("\n|path_f32| The offset value: \n");
+        println!("|path_f32| H parameters start at: {:?} \n", Hoffset);
+        println!("|path_f32| A parameters start at: {:?} \n", Aoffset);
+        println!("|path_f32| B parameters start at: {:?} \n", Boffset);
+        println!("|path_f32| C parameters start at: {:?} \n", Coffset);
+        println!("|path_f32| D parameters start at: {:?} \n", Doffset);
+        println!("|path_f32| E parameters start at: {:?} \n", Eoffset);
 
         // offset is added so we can access the correct params (H,A,B,C,D,E) for output neurons
         /* 
@@ -280,11 +279,11 @@ pub fn find_path_backward_group2(
         dDseqs_out.insert(i,[arrayfire::Seq::new(dDstart as i32, dDend as i32, 1i32), arrayfire::Seq::default() ] );
         dEseqs_out.insert(i,[arrayfire::Seq::new(dEstart as i32, dEend as i32, 1i32), arrayfire::Seq::default() ] );
         println!("\n ------------------- \n");
-        // println!("[DERIVATIVES] Gradient dA sequence mappings: {:?}",dAseqs_out);
-        // println!("[DERIVATIVES] Gradient dB sequence mappings: {:?}",dBseqs_out);
-        // println!("[DERIVATIVES] Gradient dC sequence mappings: {:?}",dCseqs_out);
-        // println!("[DERIVATIVES] Gradient dD sequence mappings: {:?}",dDseqs_out);
-        // println!("[DERIVATIVES] Gradient dE sequence mappings: {:?}",dEseqs_out);
+        println!("[DERIVATIVES] Gradient dA sequence mappings: {:?}",dAseqs_out);
+        println!("[DERIVATIVES] Gradient dB sequence mappings: {:?}",dBseqs_out);
+        println!("[DERIVATIVES] Gradient dC sequence mappings: {:?}",dCseqs_out);
+        println!("[DERIVATIVES] Gradient dD sequence mappings: {:?}",dDseqs_out);
+        println!("[DERIVATIVES] Gradient dE sequence mappings: {:?}",dEseqs_out);
 
 
 
@@ -335,7 +334,7 @@ pub fn find_path_backward_group2(
 
         // index of which gradient correspond to which neurons in the network
         dXsel = remap_rows(&rvec, &idxsel, neuron_size);
-        //af_print!("|GRADIENTS| Input gradient index: ", dXsel);
+        af_print!("|GRADIENTS| Input gradient index: ", dXsel);
         dXsel_out.insert(i, dXsel);
         println!("|GRADIENTS| Input gradient index mappings: {:?} \n", dXsel_out);
 
@@ -357,10 +356,10 @@ pub fn find_path_backward_group2(
 
         // Sparse value
         sparseval = arrayfire::lookup(&valsel, &idx, 0);
-        //af_print!("[CSR] Weight values in CSR format:", sparseval);
+        af_print!("[CSR] Weight values in CSR format:", sparseval);
         // Sparse Col vector
         sparsecol = arrayfire::lookup(&rvec, &idx, 0);
-        //af_print!("[CSR] Column indices before remapping: \n", sparsecol);
+        af_print!("[CSR] Column indices before remapping: \n", sparsecol);
         let mut temparr = arrayfire::constant::<i32>(0,arrayfire::Dim4::new(&[neuron_size,1,1,1]));
 
         let repeat_dims = arrayfire::Dim4::new(&[1,1,1,1]);
@@ -372,7 +371,7 @@ pub fn find_path_backward_group2(
         arrayfire::assign_gen(&mut temparr, &idxrs, &counts);
 
         sparsecol = arrayfire::lookup(&temparr, &sparsecol, 0);
-        //af_print!("[CSR] Column indices after remapping: \n", sparsecol);
+        af_print!("[CSR] Column indices after remapping: \n", sparsecol);
 
 
 
@@ -386,7 +385,7 @@ pub fn find_path_backward_group2(
         // Sparse Row
         sparserow = arrayfire::lookup(&cvec, &idx, 0);
 
-        //af_print!("[CSR] Row indices before remapping: \n", sparserow);
+        af_print!("[CSR] Row indices before remapping: \n", sparserow);
 
 
         let ones = arrayfire::constant::<i32>(1,sparserow.dims());
@@ -400,7 +399,7 @@ pub fn find_path_backward_group2(
 
         let constarr = arrayfire::constant::<i32>(0,arrayfire::Dim4::new(&[1,1,1,1]));
         sparserow = arrayfire::join(0, &constarr, &sparserow);
-        //af_print!("[CSR] Row indices after remapping: \n", sparserow);
+        af_print!("[CSR] Row indices after remapping: \n", sparserow);
 
 
         // HashMap that store CSR matrix info (row,col,val) with corresponding timestep i
@@ -430,7 +429,7 @@ Step 3: Sources [50, 75, 125, 175] → Find sources [25, 40, 60, 90]
         // Next idxsel
         newidxsel = find_unique(&cvec,neuron_size);
 
-        //af_print!("[NEURON] Unique source neurons for next backward step: \n", newidxsel);
+        af_print!("[NEURON] Unique source neurons for next backward step: \n", newidxsel);
 
         // apply with time-series dataset
         // Add new Y error
@@ -480,13 +479,13 @@ Step 3: Sources [50, 75, 125, 175] → Find sources [25, 40, 60, 90]
     *Eseqs = [arrayfire::Seq::new(Estart as i32, Eend as i32, 1i32)];
 
     println!("\n ---------------------- \n");
-    // println!("[PARAMS] Global parameter sequence boundaries of W: {:?} \n", Wseqs);
-    // println!("[PARAMS] Global parameter sequence boundaries of H: {:?} \n", Hseqs);
-    // println!("[PARAMS] Global parameter sequence boundaries of A: {:?} \n", Aseqs);
-    // println!("[PARAMS] Global parameter sequence boundaries of B: {:?} \n", Bseqs);
-    // println!("[PARAMS] Global parameter sequence boundaries of C: {:?} \n", Cseqs);
-    // println!("[PARAMS] Global parameter sequence boundaries of D: {:?} \n", Dseqs);
-    // println!("[PARAMS] Global parameter sequence boundaries of E: {:?} \n", Eseqs);
+    println!("[PARAMS] Global parameter sequence boundaries of W: {:?} \n", Wseqs);
+    println!("[PARAMS] Global parameter sequence boundaries of H: {:?} \n", Hseqs);
+    println!("[PARAMS] Global parameter sequence boundaries of A: {:?} \n", Aseqs);
+    println!("[PARAMS] Global parameter sequence boundaries of B: {:?} \n", Bseqs);
+    println!("[PARAMS] Global parameter sequence boundaries of C: {:?} \n", Cseqs);
+    println!("[PARAMS] Global parameter sequence boundaries of D: {:?} \n", Dseqs);
+    println!("[PARAMS] Global parameter sequence boundaries of E: {:?} \n", Eseqs);
 
     println!("---- Finished find_path_backward_group2() ----\n ");
 }

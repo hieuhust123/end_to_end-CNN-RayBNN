@@ -159,10 +159,10 @@ fn main() {
 	    arrayfire::sync(DEVICE);
 
         let mut RSSI_TRAINX = TOTAL_RSSI_TRAINX.clone();
-        println!("RSSI_TRAINX: {:?}", RSSI_TRAINX);
-        println!("RSSI_TRAINY: {:?}", RSSI_TRAINY);
-        println!("RSSI_TESTX: {:?}", RSSI_TESTX);
-        println!("RSSI_TESTY: {:?}", RSSI_TESTY);
+        // println!("RSSI_TRAINX: {:?}", RSSI_TRAINX);
+        // println!("RSSI_TRAINY: {:?}", RSSI_TRAINY);
+        // println!("RSSI_TESTX: {:?}", RSSI_TESTX);
+        // println!("RSSI_TESTY: {:?}", RSSI_TESTY);
 
         // === SAFETY CHECKS AND DEBUG PRINTS ===
         // 2. Check dataset size for batch settings

@@ -504,10 +504,6 @@ pub fn state_space_forward_batch(
     let seqs = &[arrayfire::Seq::new(0.0f32, (input_size-1) as f32, 1.0f32),  arrayfire::Seq::default()];
     //println!("seqs: {:?} \n", seqs);
 
-    println!("\n=== RAYBNN FORWARD PASS STRUCTURE ===");
-
-    // Before the loop
-    println!("S initial shape: {:?}", S.dims());
 
 
 
@@ -543,40 +539,21 @@ if WValues.dims()[0] != WColIdx.dims()[0] {
         arrayfire::SparseFormat::CSR
     );
     //println!("W: {:?} \n",W);
-    //af_print!("W: ", W);
+    af_print!("W: ", W);
     for i in 0i64..Zslices
-    {   
-
-        if i == 0 {
-            println!("\n=== Time step 0: Verifying input placement ===");
-            
-            // Check which rows of S contain the external input
-            let input_rows = arrayfire::rows(&S, 0, (input_size-1) as i64);
-            
-            println!("S shape: {:?}", S.dims());
-            println!("Input rows shape: {:?}", input_rows.dims());
-            println!("X shape: {:?}", X.dims());
-            
-            // Check dimensions match
-            if input_rows.dims()[0] == X.dims()[0] {
-                println!("✓ Input dimensions match");
-            } else {
-                println!("✗ WARNING: Dimension mismatch!");
-            }
-        }
-
+    {
         if X_slices > 1
         {
             tempx =  arrayfire::slice(X, i);
-            //af_print!("tempx: ", tempx);
+            af_print!("tempx: ", tempx);
             arrayfire::assign_seq(&mut S, seqs, &tempx);
-            //af_print!("S: ", S);
+            af_print!("S when t>1: ", S);
             drop(tempx);
         }
         else
         {
             arrayfire::assign_seq(&mut S, seqs, &X);
-            //af_print!("S: ", S);
+            af_print!("S in else condition: ", S);
         }
         
 
@@ -584,13 +561,36 @@ if WValues.dims()[0] != WColIdx.dims()[0] {
         S = arrayfire::add(&S, &H, true);
         arrayfire::set_slice(Z, &S, i);
 
+        let label3 = format!("[FORWARD] Q value before UAF in timestep {}:", i);
+        arrayfire::print_gen(label3, &S, Some(10));
+        //af_print!("Q value before UAF:",S);
         S = UAF(&S,&A,&B,&C,&D,&E);
+        let label4 = format!("[FORWARD] Q value after UAF in timestep {}:", i);
+        arrayfire::print_gen(label4, &S, Some(10));
+        //af_print!("Q value after UAF:",S);
         arrayfire::set_slice(Q, &S, i);
+
+
     }
 
-    println!("FINISH forward pass! \n");
+    println!("FINISH backward pass! \n");
     
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -692,8 +692,6 @@ pub fn state_space_backward_group2(
 
 
     grad: &mut arrayfire::Array<f32>,
-    grad_input: &mut arrayfire::Array<f32>,
-    grad_input2: &mut arrayfire::Array<f32>
 ) {
     let neuron_size: u64 = netdata.neuron_size.clone();
     let input_size: u64 = netdata.input_size.clone();
@@ -706,33 +704,26 @@ pub fn state_space_backward_group2(
 
 
 
-    //Set output to zero
+    // Set output to zero
     *grad = arrayfire::constant::<f32>(0.0,network_params.dims());
 
-    *grad_input = arrayfire::constant::<f32>(0.0, X.dims());
-    *grad_input2 = arrayfire::constant::<f32>(0.0, X.dims());
 
 
 
 
 
 
-    //Get current selection of neurons
 
+    /// Get current selection of neurons
     let active_size = neuron_idx.dims()[0];
-    println!("\n=== NEURON INDEX VERIFICATION ===");
-    println!("Total active neurons: {}", active_size);
-    println!("Input size: {}", input_size);
     let idxsel = arrayfire::rows(neuron_idx, (active_size-output_size) as i64, (active_size-1)   as i64);
-
-
 
 
     let Qslices: u64 = Q.dims()[2];
     let Yslices: u64 = Y.dims()[2];
     // println!("|network_f32| Value of Qslices (traj_steps): {:?}",Qslices);
     // println!("|network_f32| Value of Yslices (traj_size): {:?}",Yslices);
-    //Get Yhat
+    /// Get Yhat
     let mut idxrs = arrayfire::Indexer::default();
     let seq1 = arrayfire::Seq::new(0.0f32, (batch_size-1) as f32, 1.0);
     let seq2 = arrayfire::Seq::new((proc_num-1) as f32, (Qslices-1) as f32, 1.0);
@@ -740,19 +731,26 @@ pub fn state_space_backward_group2(
     idxrs.set_index(&seq1, 1, None);
     idxrs.set_index(&seq2, 2, None);
     let Yhat = arrayfire::index_gen(Q, idxrs);
+    
+    /// Q[neuron_size,batch_size,traj_steps,1]
+    //af_print!("Value of Q: ", Q);
+
+    /// Yhat[output_neurons,batch_size,1,1]
+    
+    // NOTE: Don't drop idxsel here - it's needed later in the loop
 
     let temp_dims = arrayfire::Dim4::new(&[1,1,1,1]);
     let S_dims = arrayfire::Dim4::new(&[neuron_size,batch_size,1,1]);
     
-    // println!("Dimension of S: {:?}",S_dims);
+    println!("Dimension of S: {:?}",S_dims);
 
     //Calculate error
     let total_error = loss_grad(&Yhat,Y);
-    let mut yslicidx: i64 = (Yslices-1) as i64;
+    let mut yslicidx: i64 = (Yslices-1) as i64; //
     let mut error = arrayfire::slice(&total_error, yslicidx);
 
-    // let label = format!("error after slicing index {} along the 3rd dimension of total error", yslicidx);
-    // af_print!(&label,&error);
+    let label = format!("error after slicing index {} along the 3rd dimension of total error", yslicidx);
+    af_print!(&label,&error);
 
     /// Z[neuron_size,batch_size,traj_steps]
     let Zslices: i64 = Z.dims()[2] as i64;
@@ -856,10 +854,20 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         println!("|network_f32| Timestep: {:?} \n", i);
 
         println!("Number of current active neurons: {:?}",active_size);
-        // af_print!("Index of output neurons:", idxsel);
+        af_print!("Index of output neurons:", idxsel);
+        af_print!("Value of Yhat: ", Yhat);
+        af_print!("Z value in timestep : ",Z);
+        
+        
+        // Debug: Print array info
+        println!("Q dimensions: {:?}", Q.dims());
+        println!("Q elements: {}", Q.elements());
+        
+        //af_print!(&label2, &Q);
+        let label2 = format!("[BACKWARD] Q value in timestep {}: ", i);
 
-        // af_print!("Z value: ",Z);
-        //Select X value
+        // Alternative: try using print_gen directly
+        arrayfire::print_gen(label2, &Q, Some(10));
         let mut idxrs = arrayfire::Indexer::default();
         sliceseq = arrayfire::Seq::new(i as f32, i as f32, 1.0);
         idxrs.set_index(&idxsel_out[&i], 0, None);
@@ -867,30 +875,30 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         idxrs.set_index(&sliceseq, 2, None);
         Xtemp = arrayfire::index_gen(Z, idxrs);
 
-        //println!("Value of indexer object used to slice/extract Z: {:?}",idxrs);
-        // af_print!("Value of temporary X: ", Xtemp);
+        af_print!("Value of temporary X: ", Xtemp);
 
-        //Get current UAF parameters
+        // Get current UAF parameters
         sA = arrayfire::lookup(&network_params, &Aidxsel_out[&i], 0);
-
+        af_print!("A param: ", sA);
         sB = arrayfire::lookup(&network_params, &Bidxsel_out[&i], 0);
-
+        af_print!("B param: ", sB);
         sC = arrayfire::lookup(&network_params, &Cidxsel_out[&i], 0);
-
+        af_print!("C param: ", sC);
         sD = arrayfire::lookup(&network_params, &Didxsel_out[&i], 0);
-
+        af_print!("D param: ", sD);
         sE = arrayfire::lookup(&network_params, &Eidxsel_out[&i], 0);
+        af_print!("E param: ", sE);
 
 
 
 
 
-
-
-        // af_print!("Value of dX before element wise product 1: ", dX);
+        let label5 = format!("Value of dX before Compute derivative of UAF:");
+        arrayfire::print_gen(label5, &dX, Some(10));
+        //af_print!("Value of dX before Compute derivative of UAF: ", dX);
         // af_print!("Value of dA before UAF: ", dA);
 
-        //Compute derivative of UAF
+        /// Compute derivative of UAF
         deriUAF(&Xtemp,
             &sA,
             &sB,
@@ -912,18 +920,20 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         
         // af_print!("Value of dA after UAF: ", dA);
         
-        // af_print!("Value of dX before element wise product 2: ", dX);
+        let label6 = format!("Value of dX after Compute derivative of UAF:");
+        arrayfire::print_gen(label6, &dX, Some(10));
+        //af_print!("Value of dX after Compute derivative of UAF: ", dX);
         let dUAF = dX.clone();
         println!("dUAF/dZ shape: {:?}", dUAF.dims());
         let dJ = error.clone();
         println!("dJ/dUAF: {:?}", dJ.dims());
-        // af_print!("Value of error: ", error);
-        // af_print!("Total error grads for output neurons: ", total_error);
+        af_print!("Value of error: ", error);
+        af_print!("Total error grads for output neurons: ", total_error);
 
-        //Compute dX
+        // Compute dX
         dX = arrayfire::mul(&dX, &error, false);
         
-        // af_print!("Value of dX after element wise product dX ⊙ error: ", dX);
+        af_print!("Value of dX after element wise product dX ⊙ error: ", dX);
         
         /// extract grad by Hidxsel_out[&i] index [3,1,1,1]
         let a = arrayfire::lookup(grad, &Hidxsel_out[&i], 0);
@@ -943,14 +953,14 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         // Update H = gradient (dX) + bias
         tempgH = arrayfire::lookup(grad, &Hidxsel_out[&i], 0) + (arrayfire::sum(&dX, 1) );
         
-        // af_print!("Temporary ∂H",tempgH);
+        af_print!("Temporary ∂H",tempgH);
 
         let mut idxrs = arrayfire::Indexer::default();
         idxrs.set_index(&Hidxsel_out[&i], 0, None);
         arrayfire::assign_gen(grad, &idxrs, &tempgH);
         drop(tempgH);
 
-        // af_print!(" Updated ∂H",grad);
+        af_print!(" Updated ∂H",grad);
 
         // Join all
 
@@ -968,12 +978,12 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         // repeat error 5 times and save it in tilerror AF Array
         // error [idxsel, batch_size, traj_steps, 1]
         tileerror =  arrayfire::tile(&error, tileerror_dims);
-        // af_print!("UAF group array before element wise product:",UAFgroup);
-        // af_print!("Tileerror:",tileerror);
+        af_print!("UAF group array before element wise product:",UAFgroup);
+        af_print!("Tileerror:",tileerror);
         UAFgroup = arrayfire::mul(&tileerror, &UAFgroup, false);
         drop(tileerror);
         
-        // af_print!("UAF group array after element wise product UAFgroup ⊙ tileerror:",UAFgroup);
+        af_print!("UAF group array after element wise product UAFgroup ⊙ tileerror:",UAFgroup);
         let c = arrayfire::sum(&UAFgroup, 1);
         let d = arrayfire::lookup(grad, &combidxsel_out[&i],0);
         // af_print!("Summed UAF group gradients:",c);
@@ -982,14 +992,14 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         // Update new_grad = gradient (dX) + bias + UAFgroup
         UAFgroup = arrayfire::sum(&UAFgroup, 1) + arrayfire::lookup(grad, &combidxsel_out[&i],  0);
         
-        // af_print!("Temporary ∂UAF",UAFgroup);
+        af_print!("Temporary ∂UAF",UAFgroup);
         
         let mut idxrs = arrayfire::Indexer::default();
         idxrs.set_index(&combidxsel_out[&i], 0, None);
         arrayfire::assign_gen(grad, &idxrs, &UAFgroup);
         drop(UAFgroup);
 
-        // af_print!(" Updated ∂UAF",grad);
+        af_print!(" Updated ∂UAF",grad);
 
 
 
@@ -1000,13 +1010,13 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
 
 
 
-        //Get dX of each row
+        /// Get dX of each row
         let mut idxrs = arrayfire::Indexer::default();
         idxrs.set_index(&dXsel_out[&i], 0, None); // extract number of rows. Eg: dXsel=[2,5,6]
         idxrs.set_index(&batchseq, 1, None); // extract number of col. Bc batchseq=5 --> select all
         tempdX = arrayfire::index_gen(&dX, idxrs);
         
-        //af_print!("Temporary dX need for calculating gW:",tempdX);
+        af_print!("Temporary dX need for calculating gW:",tempdX);
 
 
 
@@ -1023,53 +1033,52 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
    
    For timestep i, the forward pass input was:
    - External input: X[i]
-   - Recurrent input: Q[i-1] (from previous timestep)
+   - Recurrent input: S[i-1] (from previous timestep)
    
-   So inx = X[i] + Q[i-1] represents the complete input
+   So inx (Qt) = X[i] + S[i-1] represents the complete input
    that was fed into the network at timestep i.
    
-   Note: When i = 0, there is no previous timestep, so Q[i-1] = 0.
+   Note: When i = 0, there is no previous timestep, so S[i-1] = 0.
    */
 
         //Get input values
         inx = arrayfire::constant::<f32>(0.0,S_dims);
-        // get input values of previous timestep (first slice of Q)
+        // get input values of previous timestep (first slice of S)
         if (i > 0)
         {
             
             inx = arrayfire::slice(Q, (i-1) );
-            // println!("----- Trigger condition 1 ---- \n");
-            // af_print!("Initial inx values: ",inx);
+            println!("--- Trigger condition 1: i > 0 --- \n");
+            let label7 = format!("inx values in timestep {}: ", i);
+            arrayfire::print_gen(label7, &inx, Some(10));
         }
-
         // X_slices = traj_steps
         if X_slices > 1
         {
             tempx =  arrayfire::slice(X, i);
-            // println!("----- Trigger condition 2 ---- \n");
-            // af_print!("Temporary Input values: ",tempx);
+            println!("--- Trigger condition 2: traj_steps > 1 --- \n");
+            af_print!("Temporary Input values: ",tempx);
             // this I think is like eq 24
             arrayfire::assign_seq(&mut inx, seqs, &tempx);
             drop(tempx);
-            // af_print!("Assigned Input values: ",inx);
+            arrayfire::print_gen("Assigned Input values: ".to_string(), &inx, Some(10));
         }
         else
         {   
-            println!("----- traj_steps<1 --> Trigger condition 3 ---- \n");
+            println!("--- traj_steps<1 --> Trigger condition 3 --- \n");
             arrayfire::assign_seq(&mut inx, seqs, &X);
-            //af_print!("Assigned Input values: ",inx);
+            arrayfire::print_gen("Assigned Input values: ".to_string(), &inx, Some(10));
         }
-
-        //Update gW
+        // Update gW
         let mut idxrs = arrayfire::Indexer::default();
         idxrs.set_index(&cvec_out[&i], 0, None);
         idxrs.set_index(&batchseq, 1, None);
         tempinx = arrayfire::index_gen(&inx, idxrs);
         drop(inx);
-        // af_print!("Input values after extracted for calculating gW: ",tempinx);
-        // af_print!("Temporary dX used for calculating gW: ",tempdX);
+        af_print!("Input values after extracted for calculating gW: ",tempinx);
+        af_print!("Temporary dX used for calculating gW: ",tempdX);
         tempgW = arrayfire::mul(&tempdX, &tempinx, false);
-        // af_print!("gradient of W after element wise product tempdX ⊙ tempinx: ",tempgW);
+        af_print!("gradient of W after element wise product tempdX ⊙ tempinx: ",tempgW);
         drop(tempinx);
 
         let e = arrayfire::sum(&tempgW, 1);
@@ -1079,21 +1088,21 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         // af_print!("Current weight parameter gradient from lookup operation:",f);
         tempgW = (arrayfire::sum(&tempgW, 1) )+ arrayfire::lookup(grad, &valsel_out[&i], 0);
 
-        // af_print!("Temporary gW: ",tempgW);
+        af_print!("Temporary gW: ",tempgW);
 
         let mut idxrs = arrayfire::Indexer::default();
         idxrs.set_index(&valsel_out[&i], 0, None);
         arrayfire::assign_gen(grad, &idxrs, &tempgW);
         drop(tempgW);
 
-        // af_print!("Updated gW to gradient array: ",grad);
+        af_print!("Updated gW to gradient array: ",grad);
 
         
-
-
-        //Propagate Errors
+        af_print!("Network params: ", network_params);
+        af_print!("grad array: ", grad);
+        // Propagate Errors
         tempW = arrayfire::lookup(network_params, &sparseval_out[&i], 0);
-        // af_print!("Temporary weight initially: ",tempW);
+        af_print!("Temporary weight initially: ",tempW);
 
         tempW = arrayfire::sparse::<f32>(
             nrows_out[&i],
@@ -1103,104 +1112,32 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
             &sparsecol_out[&i],
             arrayfire::SparseFormat::CSR
         );
-        // af_print!("Temporary weight after: ",tempW);
-        // println!("W shape: {:?}", tempW.dims());
-        // af_print!("dX before matmul: ",dX);
-        // af_print!("tempdX before matmul: ",tempdX);
-        // let mut d_x = arrayfire::constant::<f32>(0.0,temp_dims);
-        // d_x = arrayfire::mul(&dUAF, &dJ, false);
-        // println!("W shape: {:?}", tempW.dims());
-        // println!("dUAF shape: {:?}", dUAF);
-        // println!("dJ shape: {:?}", dJ);
-        // println!("d_x: {:?}", d_x);
-        // af_print!("dJ/dZ: ", d_x);
-        // d_x = arrayfire::matmul(&tempW,
-        //     &d_x,
-        //     arrayfire::MatProp::NONE,
-        //     arrayfire::MatProp::NONE
-        // );
-        
-        // println!("dJ/dX test: {:?}", d_x);
+        af_print!("Temporary weight after: ",tempW);
+        let dense_W = arrayfire::sparse_to_dense(&tempW);
+        af_print!("Dense weight matrix: ", dense_W);
+        af_print!("dX before matmul: ",dX);
+        af_print!("tempdX before matmul: ",tempdX);
 
-        // if error.dims()[0] >= input_size {
-        //     let in_grad = arrayfire::rows(&d_x, 0, (input_size-1) as i64);
-        //     if X_slices > 1{
-        //         arrayfire::set_slice(grad_input2, &in_grad, i);
-        //     }
-        //     else {
-        //         *grad_input2 = grad_input2.clone() + in_grad.clone();
-        //     }
-        //     drop(in_grad);
-        // }
-        // println!("=======================================");
-        // println!("\n");
         error = arrayfire::matmul(&tempW,
             &dX,
             arrayfire::MatProp::NONE,
             arrayfire::MatProp::NONE
         );
-        drop(tempW);
-        // af_print!("Error = W . dX: ",error);
-  // Debug: Print dimensions BEFORE checking condition
-println!("=== Time step {} ===", i);
-println!("error.dims()[0] = {}", error.dims()[0]);
-println!("input_size = {}", input_size);
-println!("nrows_out[&i] = {}", nrows_out[&i]);
-println!("dX.dims()[0] = {}", dX.dims()[0]);
-println!("Condition check: {} >= {}? {}", error.dims()[0], input_size, error.dims()[0] >= input_size);
-
-// Extract input gradients if available
-if error.dims()[0] >= input_size {
-    let input_grad_at_t = arrayfire::rows(&error, 0, (input_size-1) as i64);
-    
-    println!("condition 1 NOTICE dJ/dX: {:?}", input_grad_at_t);
-    if X_slices > 1 {
-        if i < X_slices as i64 {
-            // ACCUMULATE: Get existing gradient and add new contribution
-            let existing = arrayfire::slice(grad_input, i);
-            let updated = existing + input_grad_at_t.clone();  // ← KEY: Addition!
-            arrayfire::set_slice(grad_input, &updated, i);
-        }
-        else {
-            println!("WARNING: timestep {} >= X_slices {}, skipping", i, X_slices);
-        }
-    } 
-    else {
-        *grad_input = grad_input.clone() + input_grad_at_t.clone();
-        println!("condition 3 NOTICE dJ/dX: {:?}", grad_input);
-    }
-    //af_print!("dJ/dX: ", grad_input); 
-    drop(input_grad_at_t);
-} else {
-    println!("SKIPPED: error array has only {} rows, need at least {}", error.dims()[0], input_size);
-}
-
-// Count how many time steps actually extract gradients
-let mut extracted_count = 0;
-let mut skipped_count = 0;
-
-if error.dims()[0] >= input_size {
-    extracted_count += 1;
-} else {
-    skipped_count += 1;
-    println!("SKIPPED at time step {}: error has {} rows, need {}", 
-             i, error.dims()[0], input_size);
-}
-
-// After loop ends, print summary
-println!("Gradient extraction: {} extracted, {} skipped", extracted_count, skipped_count);
-        // let input_grad_at_t = arrayfire::rows(&error, 0, (input_size-1) as i64);
-        // println!("NOTICE dJ/dX: {:?}", input_grad_at_t);
         
-        //Add new Y error
+        drop(tempW);
+        af_print!("Error = W . dX: ",error);
+
+
+
+        // Add new Y error
         if (yslicidx > 0)
         {
             yslicidx = yslicidx - 1;
             derror = arrayfire::slice(&total_error,  yslicidx);
-            //af_print!("derror: ",derror);
+            af_print!("derror: ",derror);
 
             error = arrayfire::join(0, &error, &derror);
-            //af_print!("Combined error: ",error);
+            af_print!("Combined error: ",error);
         }
 
 
@@ -1209,7 +1146,7 @@ println!("Gradient extraction: {} extracted, {} skipped", extracted_count, skipp
 
 
 
-println!("FINISH backward pass! \n");
+
 
 }
 

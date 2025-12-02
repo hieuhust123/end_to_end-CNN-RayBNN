@@ -4,3 +4,7 @@ Rust_Code/Cargo.lock
 *.gz
 *.pkl
 Python_Code/__pycache__
+*.txt
+# OR strictly these specific files:
+Python_Code/test.txt
+Python_Code/output_raybnn_training_with_cnn_features.txt

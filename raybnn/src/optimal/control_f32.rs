@@ -341,7 +341,8 @@ pub fn statespace_BTLS(
 	
 
 		let mut init_grad = arrayfire::constant::<f32>(0.0,init_point.dims());
-	
+		let mut grad_input = arrayfire::constant::<f32>(0.0,X.dims());
+		let mut grad_input2 = arrayfire::constant::<f32>(0.0,X.dims());
 		state_space_backward_group2(
 			netdata,
 			X,
@@ -397,6 +398,8 @@ pub fn statespace_BTLS(
 	
 	
 			&mut init_grad,
+			&mut grad_input,
+			&mut grad_input2,
 		);
 		
 

@@ -182,6 +182,9 @@ def main():
 
                 idx = int(y_train[i])
                 train_y[idx , j , 0, k ] = 1.0    
+
+            print("train x shape: ", train_x.shape)
+            print("train y shape: ", train_y.shape)
             combine_output = raybnn_python.state_space_forward_batch(train_x, train_y, traj_size, max_epoch, arch_search)
             
             
@@ -193,15 +196,15 @@ def main():
     output = model_testing.combine_forward(x_train_tensor, verbose=True)
 
 
-    arch_search = raybnn_python.state_space_forward_batch(
-        train_x,
-        train_y,
-        traj_size,
-        max_epoch,
-        # proc_num,
-        arch_search
-        # print out Internal state matrix here
-    )
+    # arch_search = raybnn_python.state_space_forward_batch(
+    #     train_x,
+    #     train_y,
+    #     traj_size,
+    #     max_epoch,
+    #     # proc_num,
+    #     arch_search
+    #     # print out Internal state matrix here
+    # )
 
     print("Done without errors!")
 
