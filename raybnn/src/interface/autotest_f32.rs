@@ -387,15 +387,15 @@ pub fn validate_network(
 
 pub fn test_network(
     validationdata_X: &nohash_hasher::IntMap<u64, Vec<f32> >,
-    //validationdata_Y: &nohash_hasher::IntMap<u64, Vec<f32> >,
+    validationdata_Y: &nohash_hasher::IntMap<u64, Vec<f32> >,
 
-    //eval_metric: impl Fn(&arrayfire::Array<f32>, &arrayfire::Array<f32>) -> f32   + Copy,
+    eval_metric: impl Fn(&arrayfire::Array<f32>, &arrayfire::Array<f32>) -> f32   + Copy,
     arch_search: &arch_search_type,
 
 
 
 	Yhat_out: &mut nohash_hasher::IntMap<u64, Vec<f32> >,
-	//eval_metric_out: &mut Vec<f32>
+	eval_metric_out: &mut Vec<f32>
 ){
 
 
@@ -634,11 +634,14 @@ pub fn test_network(
 
 	//X =  arrayfire::Array::new(&validationdata_X[&batch_idx], train_X_dims);
 
-	// Y = arrayfire::Array::new(&validationdata_Y[&batch_idx], Y_dims);
+	// Only load Y if validationdata_Y contains the key (for backward compatibility)
+	if validationdata_Y.contains_key(&batch_idx) {
+		Y = arrayfire::Array::new(&validationdata_Y[&batch_idx], Y_dims);
+	}
 
 
 
-	// *eval_metric_out = Vec::new();
+	*eval_metric_out = Vec::new();
 
 	*Yhat_out = nohash_hasher::IntMap::default();
 
@@ -651,7 +654,10 @@ pub fn test_network(
 
 		//X =  arrayfire::Array::new(&validationdata_X[&batch_idx], train_X_dims);
 
-		//Y = arrayfire::Array::new(&validationdata_Y[&batch_idx], Y_dims);
+		// Only load Y if validationdata_Y contains the key (for backward compatibility)
+		if validationdata_Y.contains_key(&batch_idx) {
+			Y = arrayfire::Array::new(&validationdata_Y[&batch_idx], Y_dims);
+		}
 
 
 
@@ -691,17 +697,18 @@ pub fn test_network(
 		idxrs.set_index(&seq1, 1, None);
 		idxrs.set_index(&seq2, 2, None);
 		let Yhat = arrayfire::index_gen(&Q, idxrs);
-		//let loss_output = eval_metric(&Yhat,&Y);
-	
+		
+		// Only calculate and print loss if Y data is available
+		if validationdata_Y.contains_key(&batch_idx) {
+			let loss_output = eval_metric(&Yhat,&Y);
+			println!("Test Batch {}: Loss = {}", batch_idx, loss_output);
+		}
+		
 
 		let mut Yhat_out_cpu = vec!(f32::default();Yhat.elements());
 		Yhat.host(&mut Yhat_out_cpu);
 
 		Yhat_out.insert(batch_idx, Yhat_out_cpu );
-
-
-
-		//eval_metric_out.push(loss_output);
 	}
 
 
@@ -709,16 +716,3 @@ pub fn test_network(
 
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

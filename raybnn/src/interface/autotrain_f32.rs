@@ -223,6 +223,8 @@ pub fn loss_wrapper(
 	idxrs.set_index(&seq1, 1, None);
 	idxrs.set_index(&seq2, 2, None);
 	let Yhat = arrayfire::index_gen(&Q, idxrs);
+	//af_print!("Yhat:",Yhat);
+	//println!("Yhat shape: {:?}", Yhat);
 	*loss_output = eval_metric(&Yhat,Y);
 
 	//println!("Loss: {:?} \n", loss_output);
@@ -365,7 +367,7 @@ pub fn train_network(
 
 
 
-	let mut alpha: f32 = 0.0001;
+	let mut alpha: f32 = 0.0001; // changed to 0.001 from 0.0001
 
 
 
@@ -377,13 +379,14 @@ pub fn train_network(
 
 	let mut WRowIdxCOO = CSR_to_COO(&((*arch_search).neural_network.WRowIdxCSR));
 
-
+	let X_dims = arrayfire::Dim4::new(&[input_size,batch_size,traj_steps,1]);
 	let mut total_param_size = (*arch_search).neural_network.network_params.dims()[0];
 	let mut mt_dims = arrayfire::Dim4::new(&[total_param_size,1,1,1]);
 	let mut mt = arrayfire::constant::<f32>(0.0,mt_dims);
 	let mut vt = arrayfire::constant::<f32>(0.0,mt_dims);
 	let mut grad = arrayfire::constant::<f32>(0.0,mt_dims);
-
+	let mut grad_input = arrayfire::constant::<f32>(0.0,X_dims);
+	let mut grad_input2 = arrayfire::constant::<f32>(0.0,X_dims);
 
 
 
@@ -633,6 +636,8 @@ pub fn train_network(
 
 		
 		&mut grad,
+		&mut grad_input,
+		&mut grad_input2,
 	);
 	
 	grad = -1.0f32*grad;
@@ -1359,6 +1364,8 @@ pub fn train_network(
 
 			
 			&mut grad,
+			&mut grad_input,
+			&mut grad_input2,
 		);
 		
 	
@@ -1375,7 +1382,7 @@ pub fn train_network(
 
 
 
-		//println!("loss: {}, alpha0: {}, i: {}", loss_val, alpha, i);
+		println!("Train loss: {}, alpha0: {}, i: {}", loss_val, alpha, i);
 
 
 	}
