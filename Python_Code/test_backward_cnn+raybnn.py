@@ -71,8 +71,8 @@ def main():
             
     ## Parameter setting for Fashion and MNIST dataset
     dir_path = "/tmp/"
-    max_input_size = 200
-    input_size = 200
+    max_input_size = 256
+    input_size = 256
 
     max_output_size = 10
     output_size = 10
@@ -89,7 +89,7 @@ def main():
     crossval_samples = 60
     testing_samples = 10
 
-    alpha0 = 0.000 # 0.001
+    alpha0 = 0.01 # 0.001
 
     #Create Neural Network
     arch_search = raybnn_python.create_start_archtecture(
@@ -125,39 +125,46 @@ def main():
 
     raybnn_python.print_model_info(arch_search)
 
-    max_epoch = 5    
-    
+    max_epoch=7
+
     class CNN(nn.Module):
         def __init__(self):
             super (CNN, self).__init__()
-            self.conv1 = nn.Conv2d(in_channels=1, out_channels=12, 
+            self.conv1 = nn.Conv2d(in_channels=1, out_channels=128, 
             kernel_size=3, stride=1, padding=1)
             self.pool = nn.MaxPool2d(kernel_size=2)
-            self.conv2 = nn.Conv2d(in_channels=12, out_channels=12, 
+            self.conv2 = nn.Conv2d(in_channels=128, out_channels=64, 
             kernel_size=3, stride=1, padding=1)
-            self.conv3 = nn.Conv2d(in_channels=12, out_channels=24,
+            self.conv3 = nn.Conv2d(in_channels=64, out_channels=16,
             kernel_size=3, stride=1, padding=1)
             self.drop = nn.Dropout2d(p=0.1)  # changed to 0.1
 
-            # just added
-            self.projection = nn.Linear(1176, 200)
-            self.bn = nn.BatchNorm1d(200)
+            # # just added
+            self.projection = nn.Linear(784, 256)
+            # self.bn = nn.BatchNorm1d(200)
 
         def forward(self, raw_images, y_labels, verbose=False):
             # First convolutional layer + pooling + ReLU
-            x = F.relu(self.pool(self.conv1(raw_images)))
+            x=self.conv1(raw_images)
+            x=F.relu(x)
+            x=self.pool(x)
             if verbose:
-                print("After conv1 + pool + ReLu: ", x.shape) # torch.Size([1000, 12, 14, 14])
+                print("After conv1 + pool + ReLU: ", x.shape) # torch.Size([1000, 128, 14, 14])
 
             # Second conv layer + pooling + ReLU
-            x = F.relu(self.pool(self.conv2(x)))
+            x=self.conv2(x)
+            x=F.relu(x)
+            x=self.pool(x)
             if verbose:
-                print("After conv2 + pool + ReLU: ", x.shape) # torch.Size([1000, 12, 7, 7])
+                print("After conv2 + pool + ReLU: ", x.shape) # torch.Size([1000, 64, 7, 7])
             
             # Third conv layer + dropout + ReLU
-            x = F.relu(self.drop(self.conv3(x)))
+            x=self.conv3(x)
+            x=F.relu(x)
             if verbose:
-                print("After conv3 + drop + ReLU: ", x.shape) # torch.Size([1000, 24, 7, 7])
+                print("After conv3 + ReLU: ", x.shape) # torch.Size([1000, 16, 7, 7])
+            x=self.drop(x)
+
 
             # Dropout behavior depends on model.training:
             # - train(): randomly zeros ~10% of activations (regularization)
@@ -168,33 +175,24 @@ def main():
 
             features_flat = features.reshape(features.size(0), -1)
             if verbose:
-                print("After flattening: ", features_flat.shape) # torch.Size([1000, 1176])
+                print("After flattening: ", features_flat.shape) # 16x7x7=784
             
-            # Apply projection
+            # # Apply projection
             features_reduced = self.projection(features_flat)
             if verbose:
                 print("After projection: ", features_reduced.shape) # torch.Size([1000, 200])
-            features_normalized = self.bn(features_reduced) # Apply BN here
-            return features_normalized
+            # features_normalized = self.bn(features_reduced) # Apply BN here
+            return features_reduced
 
     class AutoGradEndtoEnd(torch.autograd.Function):
-        # Class variable to store updated arch_search from backward pass
-        _updated_arch_search = None
+
         _current_epoch = 0
         @staticmethod
-        def forward(ctx, features_flat, y_labels, arch_search, batch_size, 
+        def forward(ctx, features_flat, y_labels, batch_size, 
         traj_size, max_epoch, input_size, output_size, training_samples, alpha0):
-            """
-            
-            """
-            # Use updated arch_search from previous backward pass if available
-            if AutoGradEndtoEnd._updated_arch_search is not None:
-                arch_search = AutoGradEndtoEnd._updated_arch_search
-                # Note: The model's arch_search will be updated via the class variable
-                # The next forward pass will use the updated arch_search
+
             
             # Save tensors that will be needed in backward
-            ctx.arch_search = arch_search
             ctx.batch_size = batch_size
             ctx.traj_size = traj_size
             ctx.max_epoch = max_epoch
@@ -206,16 +204,16 @@ def main():
             # print(f"[AUTOGRAD FORWARD] Features shape: {features_flat.shape}") # torch.Size([1000, 1176])
             # print(f"[AUTOGRAD FORWARD] Labels shape: {y_labels.shape}") # torch.Size([1000])
 
-            # Convert X and Y to numpy arrays
+            # Convert X and Y to numpy arrays (Convert PyTorch → NumPy)
             features_np = features_flat.detach().cpu().numpy()
             y_labels_np = y_labels.detach().cpu().numpy()
 
-            # Create training arrays using existing format
+            # Create training arrays using existing format (Reshape to RayBNN format)
             train_x = np.zeros((input_size,batch_size,traj_size,training_samples)).astype(np.float32)
             train_y = np.zeros((output_size,batch_size,traj_size,training_samples)).astype(np.float32)
 
-            print("train X shape: ", train_x.shape) # (1176, 1000, 1, 60)
-            # Divide raw dataset into correspond batches
+            print("train X shape: ", train_x.shape) # (256, 1000, 1, 60)
+            # Divide raw dataset into correspond batches (Fill the arrays)
             for i in range(features_np.shape[0]):
                 j = (i% batch_size)
                 k = int(i/batch_size)
@@ -244,58 +242,10 @@ def main():
             Yhat = Yhat_tensor.squeeze(-1).squeeze(-1).T
             print("Reshaped Yhat: ", Yhat.shape) # torch.Size([1000, 10])
             
-            # TEST 4: RayBNN Output Quality Analysis
-            print("\n" + "="*60)
-            print("TEST 4: RayBNN Output ")
-            print("\n")
-            print(f"Output shape: {Yhat.shape}")
-            print(f"Output range: [{Yhat.min().item():.6f}, {Yhat.max().item():.6f}]")
-            print(f"Output mean: {Yhat.mean().item():.6f}")
-            print(f"Output std: {Yhat.std().item():.6f}")
-            
             # Check predictions
             preds = Yhat.argmax(dim=1)
-            unique_classes = len(torch.unique(preds))
-            print(f"Unique predicted classes: {unique_classes} / {Yhat.shape[1]}")
-            
-            if unique_classes == 1:
-                print("⚠️ CRITICAL: RayBNN always predicts same class! (Mode collapse)")
-                print("  → RayBNN is stuck - CNN cannot learn from this!")
-            elif unique_classes < Yhat.shape[1] * 0.3:
-                print(f"⚠️ WARNING: Only {unique_classes} classes predicted (low diversity)")
-            else:
-                print(f"✓ Good diversity: {unique_classes} different classes predicted")
-            
-            # Check class distribution
-            class_counts = torch.bincount(preds, minlength=Yhat.shape[1])
-            print(f"Class distribution: {class_counts.tolist()}")
-            
-            # Check entropy (diversity measure)
             probs = torch.softmax(Yhat, dim=1)
             print(f"probs: {probs}")
-            entropy = -(probs * torch.log(probs + 1e-8)).sum(dim=1).mean()
-            max_entropy = np.log(Yhat.shape[1])  # log(10) for 10 classes
-            print(f"Output entropy: {entropy.item():.6f} (max possible: {max_entropy:.6f})")
-            
-            if entropy < 0.5:
-                print("⚠️ WARNING: Outputs are too confident/similar (low entropy)")
-                print("  → RayBNN outputs lack diversity - may indicate mode collapse")
-            elif entropy < max_entropy * 0.5:
-                print("⚠️ WARNING: Entropy is below 50% of maximum")
-                print("  → RayBNN outputs are somewhat overconfident")
-            else:
-                print("✓ Good entropy: Outputs have reasonable diversity")
-            
-            # Check if outputs are reasonable (not all zeros or NaNs)
-            if torch.isnan(Yhat).any():
-                print("✗ CRITICAL: Output contains NaN values!")
-            elif torch.isinf(Yhat).any():
-                print("✗ CRITICAL: Output contains Inf values!")
-            elif torch.allclose(Yhat, torch.zeros_like(Yhat)):
-                print("✗ CRITICAL: Output is all zeros!")
-            else:
-                print("✓ Output values are valid (no NaN/Inf/zeros)")
-            
             # Sample outputs for inspection
             print(f"\nSample outputs (first 5 samples):")
             for i in range(min(5, Yhat.shape[0])):
@@ -307,7 +257,7 @@ def main():
                       f"true_label={true_label}")
             
             print("="*60 + "\n")
-            
+
             # Store entropy for epoch tracking
             probs = torch.softmax(Yhat, dim=1)
             entropy = -(probs * torch.log(probs + 1e-8)).sum(dim=1).mean()
@@ -319,7 +269,6 @@ def main():
         @staticmethod
         def backward(ctx, grad_output):
             features_flat, y_labels = ctx.saved_tensors
-            arch_search = ctx.arch_search
             batch_size = ctx.batch_size
             traj_size = ctx.traj_size
             max_epoch = ctx.max_epoch
@@ -330,18 +279,18 @@ def main():
 
             current_epoch = AutoGradEndtoEnd._current_epoch
 
+            # Convert PyTorch → NumPy
             features_np = features_flat.detach().cpu().numpy()
             y_labels_np = y_labels.detach().cpu().numpy()
 
             print("features_np shape: ", features_np.shape)
             print("y_label shape: ", y_labels_np.shape)
-            #input_size = features_np.shape[1]
 
-            # Create training arrays using the same format as forward pass
+            # Create training arrays using the same format as forward pass (Reshape to RayBNN format)
             train_x = np.zeros((input_size,batch_size,traj_size,training_samples)).astype(np.float32)
             train_y = np.zeros((output_size,batch_size,traj_size,training_samples)).astype(np.float32)
 
-            # Format data the same way as forward pass 
+            # Format data the same way as forward pass (Fill the arrays)
             for i in range(features_np.shape[0]):
                 j = (i % batch_size)
                 k = int(i/batch_size)
@@ -351,85 +300,31 @@ def main():
                 if idx < output_size:
                     train_y[idx, j, 0, k] = 1.0
             
-            print("CHECKPOINT 1: RayBNN Gradient Output")
             # Call RayBNN backward pass
             try:
-                print(f"[AUTOGRAD BACKWARD] Calling RayBNN backward with train_x shape: {train_x.shape}") # (1176, 1000, 1, 60)
+                print(f"[AUTO-GRADIENT BACKWARD] Calling RayBNN backward with train_x shape: {train_x.shape}") # (1176, 1000, 1, 60)
 
-                # Call backward pass - now returns (updated_arch_search, grad_result)
-                updated_arch_search, grad_result = raybnn_python.state_space_backward_group2(
+                grad_result = raybnn_python.state_space_backward_group2(
                     train_x, train_y, traj_size, max_epoch, alpha0, arch_search, current_epoch
                 )
-                
-                # Update arch_search with new parameters
-                ctx.arch_search = updated_arch_search
-                # Store updated arch_search in class variable for next forward pass
-                AutoGradEndtoEnd._updated_arch_search = updated_arch_search
-                
-                print("[AUTOGRAD BACKWARD] ✓ RayBNN parameters updated!")
-                
+                print("grad_result shape: ", grad_result.shape)
+                grad_result_reshaped = grad_result[:, :, 0, 0].T     
+                print("grad_result_reshaped shape: ", grad_result_reshaped.shape)
+
                 # Convert grad_result to numpy array if needed
                 if not isinstance(grad_result, np.ndarray):
                     grad_result = np.array(grad_result, dtype=np.float32)
                 
                 # grad_result = grad_result * 1000.0  # Multiply by 1000x
 
-                has_nan = np.isnan(grad_result).any()
-                has_inf = np.isinf(grad_result).any()
-                all_zeros = np.allclose(grad_result, 0)
-
-                if has_nan:
-                    print(f"⚠️ WARNING: grad_result has NaN values!")
-                if has_inf:
-                    print(f"⚠️ WARNING: grad_result has Inf values!")
-                if all_zeros:
-                    print(f"⚠️ WARNING: grad_result is all zeros!")
-
-                print("\n Raw RayBNN Grads")
-
-                print(f"grad_result shape: {grad_result.shape}")
-                print(f"grad_result stats: mean={grad_result.mean():.2e}, std={grad_result.std():.2e}")
-                print(f"grad_result range: [{grad_result.min():.2e}, {grad_result.max():.2e}]")
-                print(f"grad_result norm: {np.linalg.norm(grad_result):.2e}")
-                print(f"Non-zero elements: {np.count_nonzero(grad_result)}/{grad_result.size} ({np.count_nonzero(grad_result)/grad_result.size*100:.1f}%)")
-
-                print(f"[AUTOGRAD BACKWARD] features shape: {grad_result.shape}") # (1176, 1000, 1, 1)
-                grad_result_reshaped = grad_result[:, :, 0, 0].T
-                print(f"[AUTOGRAD BACKWARD] grad_result_reshaped: {grad_result_reshaped.shape}") # (1000, 1176) 
-                print(f"[AUTOGRAD BACKWARD] grad_result_reshaped stats: mean={grad_result_reshaped.mean():.2e}, std={grad_result_reshaped.std():.2e}")
-                print(f"[AUTOGRAD BACKWARD] grad_result_reshaped norm: {np.linalg.norm(grad_result_reshaped):.2e}")
+                assert not np.isnan(grad_result).any(), "NaN in gradients!"
 
                 grad_features = torch.from_numpy(grad_result_reshaped).to(features_flat.device)
-                grad_features = grad_features   # Changed from 0.01 to 0.001   #############
                 
-                # print("\n STAGE 4: After Safety Clamps")
-                # grad_norm_before_clamp = torch.norm(grad_features).item()
-                # grad_features = torch.nan_to_num(grad_features, nan=0.0, posinf=0.001, neginf=-0.001)
-                # grad_norm_after_nan = torch.norm(grad_features).item()
-                # grad_features = torch.clamp(grad_features, -0.01, 0.01)
-                # grad_norm_after_clamp = torch.norm(grad_features).item()
-
-                # print(f"Before clamps: norm={grad_norm_before_clamp:.2e}")
-                # print(f"After nan_to_num: norm={grad_norm_after_nan:.2e}")
-                # print(f"After clamp: norm={grad_norm_after_clamp:.2e}")
-                # print(f"Clamp impact: {grad_norm_after_clamp/grad_norm_before_clamp:.2e}x")
-
-                # # Check how many values were clamped
-                # clamped_count = ((torch.from_numpy(grad_result_reshaped).to(features_flat.device) * 0.001).abs() > 0.01).sum().item()
-                # print(f"Values clamped: {clamped_count}/{grad_features.numel()} ({clamped_count/grad_features.numel()*100:.1f}%)")
                 assert grad_features.shape == features_flat.shape, \
                 f"Gradient shape {grad_features.shape} doesn't match features {features_flat.shape}"
 
-                # print("CHECKPOINT 2: Pytorch Gradient Tensor")
-                # print(f"grad_features shape: {grad_features.shape}")
-                # print(f"grad_features device: {grad_features.device}")
-                # print(f"grad_features requires_grad: {grad_features.requires_grad}")
-                # print(f"grad_features mean: {grad_features.mean().item():.3e}")
-                # print(f"grad_features std: {grad_features.std().item():.3e}")
-                # print(f"grad_features min: {grad_features.min().item():.3e}")
-                # print(f"grad_features max: {grad_features.max().item():.3e}")
-
-                print("\n✓ Backward pass completed!")
+                print("\n Backward pass completed!")
             except Exception as e:
                 print(f"[AUTOGRAD BACKWARD] Error calling RayBNN backward: {e}")
                 import traceback
@@ -441,16 +336,10 @@ def main():
             return grad_features, None,None,None,None,None,None, None, None, None
 
     class EndtoEndTrainer (nn.Module):
-        def __init__(self, arch_search, batch_size, traj_size, max_epoch, input_size, output_size, training_samples, alpha0):
+        def __init__(self, batch_size, traj_size, max_epoch, input_size, output_size, training_samples, alpha0):
             super().__init__()
             self.cnn = CNN()
-            # network_params = obj_arch_search["neural_network"]["network_params"]
-            # print(f"network_params type: {type(network_params)}")
-            # print(f"network_params keys: {network_params.keys()}")
-            # self.raybnn_params = nn.Parameter(torch.from_numpy(network_params))
-            
             # Store RayBNN parameters for AutoGradEndtoEnd
-            self.arch_search = arch_search
             self.batch_size = batch_size
             self.traj_size = traj_size
             self.max_epoch = max_epoch
@@ -467,27 +356,10 @@ def main():
         def forward(self, raw_images, y_labels, verbose=True):
         # Step 1: CNN forward pass using your existing CNN class
             features = self.cnn(raw_images, y_labels, verbose)
-            
-            # # 🚀 CRITICAL FIX 3: AGGRESSIVE Feature Standardization + Clamping
-            features_std = (features - features.mean()) / (features.std() + 1e-8)  # Standardize
-            features_normalized = torch.clamp(features_std, -3.0, 3.0)  # Clamp to [-3, 3]
-            # print(f"Applied aggressive feature normalization: {features.shape} -> {features_normalized.shape}")
-            # print(f"Original features - mean: {features.mean().item():.6f}, std: {features.std().item():.6f}")
-            # print(f"Standardized+Clamped - mean: {features_normalized.mean().item():.6f}, std: {features_normalized.std().item():.6f}")
-            
-            # print("features shape: ", features_normalized.shape)
-            # print("label shape: ",y_labels.shape)
-        # Step 2: RayBNN forward pass using your AutoGradEndtoEnd class
-            # Update model's arch_search if there's an updated version from backward pass
-            if AutoGradEndtoEnd._updated_arch_search is not None:
-                self.arch_search = AutoGradEndtoEnd._updated_arch_search
-                print("[MODEL] ✓ Updated arch_search with new RayBNN parameters")
-            
-            # Use the most recent arch_search (may have been updated in previous backward pass)
+
             output = AutoGradEndtoEnd.apply(
-                features_normalized, # NORMALIZED CNN features for stability
+                features, # NORMALIZED CNN features for stability
                 y_labels,          # labels
-                self.arch_search,  # RayBNN params (will be updated in backward)
                 self.batch_size,   # batch size
                 self.traj_size,    # trajectory size
                 self.max_epoch,    # max epochs
@@ -498,26 +370,58 @@ def main():
             )
             print("output shape: ", output.shape)
             return output    
-        
-        def update_arch_search(self, updated_arch_search):
-            """Update the model's arch_search with new parameters from backward pass"""
-            self.arch_search = updated_arch_search    
 
 
-
-    end_to_end_model = EndtoEndTrainer(arch_search, batch_size, traj_size, max_epoch, input_size, output_size, training_samples, alpha0)
+    end_to_end_model = EndtoEndTrainer( batch_size, traj_size, max_epoch, input_size, output_size, training_samples, alpha0)
     
-    return end_to_end_model, x_train_tensor, y_train_tensor
+    return end_to_end_model, x_train_tensor, y_train_tensor, alpha0
 
 
-def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
-    # CRITICAL FIX 4: MUCH smaller learning rate for stability
+def train_ete_model(model, x_train, y_train,alpha0, batch_size, max_epoch):
+    
+    # ========== AREA 1 DIAGNOSTIC: CNN Parameter Updates ==========
+    print("\n" + "="*70)
+    print("AREA 1 DIAGNOSTIC: Checking CNN Parameter Updates")
+    print("="*70)
+    
+    # Store initial CNN parameters
+    cnn_params_init = {
+        name: param.clone().detach() 
+        for name, param in model.cnn.named_parameters()
+    }
+    
+    print("\n=== Initial CNN Parameters ===")
+    for name, param in cnn_params_init.items():
+        print(f"{name}:")
+        print(f"  Shape: {param.shape}")
+        print(f"  Mean: {param.mean().item():.6f}")
+        print(f"  Std: {param.std().item():.6f}")
+        print(f"  Min/Max: [{param.min().item():.6f}, {param.max().item():.6f}]")
+    
+    # Setup optimizer first to check parameter inclusion
     for param in model.cnn.parameters():
         param.requires_grad = True
-    
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)  
-    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+    lr = 0.0001
+    optimizer = torch.optim.Adam(model.parameters(), lr)
     criterion = torch.nn.CrossEntropyLoss()
+    
+    # Check if CNN parameters are in optimizer
+    print("\n=== CNN Parameters in Optimizer Check ===")
+    optimizer_param_ids = set(id(p) for group in optimizer.param_groups for p in group['params'])
+    cnn_param_ids = {name: id(param) for name, param in model.cnn.named_parameters()}
+    
+    for name, param_id in cnn_param_ids.items():
+        in_optimizer = param_id in optimizer_param_ids
+        status = "✓ YES" if in_optimizer else "✗ NO"
+        print(f"{name}: {status}")
+    
+    all_in_optimizer = all(param_id in optimizer_param_ids for param_id in cnn_param_ids.values())
+    if all_in_optimizer:
+        print("\n✓ ALL CNN parameters are in optimizer")
+    else:
+        print("\n✗ WARNING: Some CNN parameters NOT in optimizer!")
+    
+    print("="*70 + "\n")
     
     # Training tracking
     epoch_losses = []
@@ -527,101 +431,14 @@ def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
     epoch_times = []  
     patience_counter = 0
     early_stop_patience = 5
-    print("x train shape: ",x_train.shape)
-    print("y train shape: ", y_train.shape)
-
-    # Store initial CNN parameters
-    cnn_params_init = {
-        name: param.clone().detach() 
-        for name, param in model.cnn.named_parameters()
-    }
-    
-    print("=== Initial CNN Parameters ===")
-    for name, param in cnn_params_init.items():
-        print(f"{name}: mean={param.mean().item():.6f}, std={param.std().item():.6f}")
-    
-    # TEST 6: Store initial RayBNN parameters
-    print("\n" + "="*60)
-    print("TEST 6: RayBNN Parameter Check after extracted from Rust side")
-    print("="*60)
-    
-    try:
-        # Extract RayBNN network_params
-        network_params_obj = model.arch_search["neural_network"]["network_params"]
-        print(f"RayBNN network_params type: {type(network_params_obj)}")
-        print(f"RayBNN network_params keys: {network_params_obj.keys() if isinstance(network_params_obj, dict) else 'N/A'}")
-        
-        # Try to convert to numpy array
-        if isinstance(network_params_obj, np.ndarray):
-            raybnn_params_before = network_params_obj.copy()
-        elif hasattr(network_params_obj, 'to_numpy'):
-            # If it's an ArrayFire array with to_numpy method
-            raybnn_params_before = network_params_obj.to_numpy().copy()
-        elif isinstance(network_params_obj, dict):
-            # If it's a dict, try to extract the actual array
-            print(f"  Dict keys: {list(network_params_obj.keys())}")
-            # Try common keys
-            for key in ['data', 'values', 'array', 'params']:
-                if key in network_params_obj:
-                    temp = network_params_obj[key]
-                    print(f"    Found key '{key}', type: {type(temp)}")
-                    if isinstance(temp, np.ndarray):
-                        raybnn_params_before = temp.copy()
-                        print(f"    ✓ Extracted numpy array from '{key}'")
-                        break
-                    elif isinstance(temp, (list, tuple)):
-                        # Convert list/tuple to numpy array
-                        try:
-                            raybnn_params_before = np.array(temp, dtype=np.float32).copy()
-                            # Reshape if shape is provided
-                            if 'shape' in network_params_obj:
-                                shape = network_params_obj['shape']
-                                if isinstance(shape, (list, tuple)):
-                                    raybnn_params_before = raybnn_params_before.reshape(shape)
-                            print(f"    ✓ Converted list/tuple from '{key}' to numpy array")
-                            break
-                        except Exception as e:
-                            print(f"    ✗ Failed to convert '{key}' to numpy array: {e}")
-                    else:
-                        print(f"    ✗ '{key}' is not a numpy array or list")
-            else:
-                # If no standard key worked, try to convert the whole dict
-                print("  Attempting to extract array from dict structure...")
-                raybnn_params_before = None
-        else:
-            # Try to convert using numpy
-            try:
-                raybnn_params_before = np.array(network_params_obj, dtype=np.float32).copy()
-            except:
-                print(f"  Cannot convert to numpy array")
-                raybnn_params_before = None
-        
-        if raybnn_params_before is not None and isinstance(raybnn_params_before, np.ndarray):
-            print(f"✓ Successfully extracted RayBNN network_params")
-            print(f"RayBNN network_params shape: {raybnn_params_before.shape}")
-            # print(f"RayBNN network_params dtype: {raybnn_params_before.dtype}")
-            print(f"RayBNN network_params mean: {raybnn_params_before.mean():.6e}")
-            print(f"RayBNN network_params std: {raybnn_params_before.std():.6e}")
-            print(f"RayBNN network_params min: {raybnn_params_before.min():.6e}")
-            print(f"RayBNN network_params max: {raybnn_params_before.max():.6e}")
-        else:
-            print("Could not extract network_params as numpy array")
-            print(f"  Type: {type(network_params_obj)}")
-            print("  Will store the object directly for comparison")
-            raybnn_params_before = network_params_obj  # Store as-is for comparison
-        
-        print("\nWill check if RayBNN parameters change after training...")
-        print("="*60 + "\n")
-    except Exception as e:
-        print(f"Could not extract RayBNN parameters: {e}")
-        raybnn_params_before = None
+    print("x train shape: ",x_train.shape)  # torch.Size([60000, 1, 28, 28])
+    print("y train shape: ", y_train.shape) # torch.Size([60000])
     
     # Set model to training mode
-    # This enables dropout (line 186: F.dropout uses self.training)
-    # and makes BatchNorm use batch statistics instead of running averages
     model.train()
     print(f"\n{'='*50}")
-    print(f"ENHANCED TRAINING: {max_epoch} epochs, batch_size={batch_size}")
+    print(f" TRAINING: {max_epoch} epochs, batch_size={batch_size}")
+    print(f" alpha0={alpha0}, lr={lr}")
     print(f"{'='*50}")
 
     batch_idx = len(x_train) // batch_size
@@ -648,6 +465,69 @@ def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
             # Reduce verbosity - only verbose for first batch of each epoch
             verbose = (i == 0 and epoch < 3)  # Only first 3 epochs, first batch
             output = model(batch_x, batch_y, verbose=verbose)
+            
+            # ========== AREA 4 DIAGNOSTIC: Output Analysis ==========
+            if i == 0:  # First batch of each epoch
+                print("\n" + "="*70)
+                print(f"AREA 4 DIAGNOSTIC: RayBNN Output Analysis (Epoch {epoch+1}, Batch {i})")
+                print("="*70)
+                
+                with torch.no_grad():
+                    print(f"\nOutput Statistics:")
+                    print(f"  Shape: {output.shape}")
+                    print(f"  Range: [{output.min().item():.4f}, {output.max().item():.4f}]")
+                    print(f"  Mean: {output.mean().item():.4f}")
+                    print(f"  Std: {output.std().item():.4f}")
+                    print(f"  Variance: {output.var().item():.4f}")
+                    
+                    # Check if output is changing
+                    if epoch == 0:
+                        model._first_output = output.clone()
+                        print(f"  Status: First epoch - storing baseline")
+                    else:
+                        output_change = (output - model._first_output).abs().mean().item()
+                        print(f"  Output change from epoch 0: {output_change:.6f}")
+                        if output_change < 1e-6:
+                            print(f"  ✗ WARNING: Output NOT changing significantly!")
+                        else:
+                            print(f"  ✓ Output IS changing")
+                    
+                    # Prediction analysis
+                    probs = torch.softmax(output, dim=1)
+                    preds = output.argmax(dim=1)
+                    
+                    print(f"\nPrediction Analysis:")
+                    print(f"  Predicted classes (first 20): {preds[:20].tolist()}")
+                    print(f"  True labels (first 20): {batch_y[:20].tolist()}")
+                    
+                    # # Check prediction diversity
+                    # unique_preds = torch.unique(preds)
+                    # print(f"  Unique predictions: {len(unique_preds)}/10 classes")
+                    # if len(unique_preds) < 5:
+                    #     print(f"  ✗ WARNING: Model predicting only {len(unique_preds)} classes!")
+                    # else:
+                    #     print(f"  ✓ Good prediction diversity")
+                    
+                    # Confidence analysis
+                    max_probs = probs.max(dim=1)[0]
+                    print(f"\nConfidence Statistics:")
+                    print(f"  Mean confidence: {max_probs.mean().item():.4f}")
+                    print(f"  Min confidence: {max_probs.min().item():.4f}")
+                    print(f"  Max confidence: {max_probs.max().item():.4f}")
+                    
+                    # Entropy
+                    entropy = -(probs * torch.log(probs + 1e-8)).sum(dim=1).mean().item()
+                    print(f"  Entropy: {entropy:.4f}/2.303 (random=2.303)")
+                    
+                    if entropy > 2.2:
+                        print(f"  ✗ WARNING: High entropy - predictions are near-random!")
+                    elif entropy < 1.5:
+                        print(f"  ✓ EXCELLENT: Low entropy - confident predictions")
+                    else:
+                        print(f"  ✓ GOOD: Moderate entropy - learning in progress")
+                
+                print("="*70 + "\n")
+            
             loss = criterion(output, batch_y)
             
             # CRITICAL FIX 7: Loss explosion detection
@@ -656,60 +536,43 @@ def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
                 print("Stopping training to prevent further damage")
                 return model  # Early termination
 
-            loss.backward()  ##################
-            # Stage 5: CNN Parameter Gradients
-            print("\n CNN Parameter Gradients")
-            total_grad_norm = 0
-            param_grad_stats = {}
-
-            for name, param in model.named_parameters():
-                if param.grad is not None:
-                    grad_norm = param.grad.norm().item()
-                    grad_mean = param.grad.mean().item()
-                    grad_std = param.grad.std().item()
-                    total_grad_norm += grad_norm ** 2
-                    
-                    param_grad_stats[name] = {
-                        'norm': grad_norm,
-                        'mean': grad_mean,
-                        'std': grad_std,
-                        'min': param.grad.min().item(),
-                        'max': param.grad.max().item()
-                    }
-                    
-                    # Flag problematic gradients
-                    status = "✓"
-                    if grad_norm < 1e-8:
-                        status = "💀 VANISHED"
-                    elif grad_norm < 1e-6:
-                        status = "⚠️ TINY"
-                    elif grad_norm > 1.0:
-                        status = "🔥 LARGE"
+            loss.backward()
+            
+            # ========== AREA 2 DIAGNOSTIC: Gradient Analysis ==========
+            if i == 0:  # First batch of each epoch
+                print("\n" + "="*70)
+                print(f"AREA 2 DIAGNOSTIC: Gradient Flow Analysis (Epoch {epoch+1}, Batch {i})")
+                print("="*70)
+                
+                print("\n=== CNN Gradients ===")
+                for name, param in model.cnn.named_parameters():
+                    if param.grad is not None:
+                        grad_mean = param.grad.abs().mean().item()
+                        grad_max = param.grad.abs().max().item()
+                        grad_min = param.grad.abs().min().item()
                         
-                    print(f"  {name}: norm={grad_norm:.2e} {status}")
-
-            total_grad_norm = total_grad_norm ** 0.5
-            print(f"Total gradient norm: {total_grad_norm:.2e}")
-
-            # # CRITICAL FIX 1: AGGRESSIVE Gradient Clipping 
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.1)  # 10x more aggressive
-
-            # # Stage 6: After Gradient Clipping
-            # print("\nSTAGE 6: After Gradient Clipping")
-            # total_grad_norm_after = 0
-            # for name, param in model.named_parameters():
-            #     if param.grad is not None:
-            #         grad_norm = param.grad.norm().item()
-            #         total_grad_norm_after += grad_norm ** 2
-
-            # total_grad_norm_after = total_grad_norm_after ** 0.5
-            # print(f"Total gradient norm after clipping: {total_grad_norm_after:.2e}")
-            # print(f"Clipping impact: {total_grad_norm_after/total_grad_norm:.2e}x")
-
-            # if total_grad_norm_after < 1e-8:
-            #     print("💀 CRITICAL: Gradients vanished after clipping!")
-            # elif total_grad_norm_after < 1e-6:
-            #     print("⚠️ WARNING: Gradients very small after clipping")
+                        print(f"\n{name}:")
+                        print(f"  Gradient mean: {grad_mean:.8f}")
+                        print(f"  Gradient max: {grad_max:.8f}")
+                        print(f"  Gradient min: {grad_min:.8f}")
+                        
+                        # Diagnose gradient issues
+                        if grad_mean < 1e-10:
+                            print(f"  ✗ CRITICAL: Vanishing gradients! (mean < 1e-10)")
+                        elif grad_mean < 1e-6:
+                            print(f"  ⚠ WARNING: Very small gradients (mean < 1e-6)")
+                        elif grad_mean > 1.0:
+                            print(f"  ⚠ WARNING: Large gradients (mean > 1.0)")
+                        else:
+                            print(f"  ✓ Healthy gradient magnitude")
+                        
+                        # Check for all-zero gradients
+                        if (param.grad == 0).all():
+                            print(f"  ✗ CRITICAL: ALL gradients are zero!")
+                    else:
+                        print(f"\n{name}: ✗ NO GRADIENT (requires_grad might be False)")
+                
+                print("\n" + "="*70 + "\n")
 
             optimizer.step()
 
@@ -719,9 +582,6 @@ def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
             epoch_total += batch_y.size(0)
             epoch_correct += (predicted == batch_y).sum().item()
             
-            # Store entropy from the autograd context (calculated in forward pass)
-            # We'll extract this from the Test 4 output for now
-            # In practice, we could make AutoGradEndtoEnd store this more elegantly
             with torch.no_grad():
                 probs = torch.softmax(output, dim=1)
                 entropy = -(probs * torch.log(probs + 1e-8)).sum(dim=1).mean().item()
@@ -729,7 +589,60 @@ def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
             # Progress indicator every 20 batches
             
             current_acc = epoch_correct / epoch_total if epoch_total > 0 else 0
-            print(f"  Batch {i}: loss={loss.item():.4f}, acc={current_acc:.3f}")
+            if i % 10 == 0 or i == 0:  # Print every 10 batches
+                print(f"  Batch {i}/{batch_idx}: loss={loss.item():.4f}, acc={current_acc:.3f}, entropy={entropy:.3f}")
+
+        # ========== AREA 1 DIAGNOSTIC: Parameter Change Analysis ==========
+        print("\n" + "="*70)
+        print(f"AREA 1 DIAGNOSTIC: CNN Parameter Changes (End of Epoch {epoch+1})")
+        print("="*70)
+        
+        total_change = 0.0
+        max_change = 0.0
+        min_change = float('inf')
+        
+        print("\n=== Parameter Updates ===")
+        for name, param in model.cnn.named_parameters():
+            param_init = cnn_params_init[name]
+            change = (param - param_init).abs().mean().item()
+            rel_change = change / (param_init.abs().mean().item() + 1e-10)
+            
+            total_change += change
+            max_change = max(max_change, change)
+            min_change = min(min_change, change)
+            
+            print(f"\n{name}:")
+            print(f"  Absolute change: {change:.8f}")
+            print(f"  Relative change: {rel_change:.8f}")
+            print(f"  Current mean: {param.mean().item():.6f}")
+            print(f"  Initial mean: {param_init.mean().item():.6f}")
+            
+            # Diagnose parameter update issues
+            if change < 1e-10:
+                print(f"  ✗ CRITICAL: Parameters NOT updating! (change < 1e-10)")
+            elif change < 1e-6:
+                print(f"  ⚠ WARNING: Very small updates (change < 1e-6)")
+            else:
+                print(f"  ✓ Parameters are updating")
+        
+        avg_change = total_change / len(cnn_params_init)
+        print(f"\n=== Summary ===")
+        print(f"Average parameter change: {avg_change:.8f}")
+        print(f"Max parameter change: {max_change:.8f}")
+        print(f"Min parameter change: {min_change:.8f}")
+        
+        if avg_change < 1e-8:
+            print(f"\n✗ CRITICAL ISSUE: CNN parameters barely changing!")
+            print(f"   Possible causes:")
+            print(f"   1. Learning rate too small (current: {lr})")
+            print(f"   2. Gradients vanishing (check AREA 2)")
+            print(f"   3. RayBNN not passing gradients back")
+        elif avg_change > 0.1:
+            print(f"\n⚠ WARNING: Very large parameter changes (might be unstable)")
+        else:
+            print(f"\n✓ CNN parameters updating at healthy rate")
+        
+        print("="*70 + "\n")
 
         # End of epoch statistics
         avg_loss = epoch_loss / batch_idx
@@ -742,37 +655,39 @@ def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
         epoch_accuracies.append(epoch_accuracy)
         epoch_raybnn_entropies.append(avg_entropy)
         epoch_times.append(epoch_time)
-        # Learning rate scheduling
-        #scheduler.step(avg_loss)
+        
         current_lr = optimizer.param_groups[0]['lr']
         
-        # Enhanced Epoch Summary with Gradient Analysis
-        print(f"\nGRADIENT FLOW SUMMARY (Epoch {epoch+1}):")
+        # Enhanced Epoch Summary
+        print(f"\n{'='*70}")
+        print(f"EPOCH {epoch+1} SUMMARY")
+        print(f"{'='*70}")
         print(f"  Time: {epoch_time:.1f}s")
         print(f"  Loss: {avg_loss:.6f} (change: {avg_loss - epoch_losses[-2] if len(epoch_losses) > 1 else 'N/A'})")
         print(f"  Accuracy: {epoch_accuracy:.4f} ({epoch_accuracy*100:.1f}%)")
-
+        print(f"  RayBNN Entropy: {avg_entropy:.4f}")
+        print(f"  Learning Rate: {current_lr:.6f}")
+        print(f"  Alpha0 (RayBNN): {alpha0:.6f}")
 
         # Learning progress check
         if len(epoch_losses) > 1:
             loss_change = epoch_losses[-2] - avg_loss
             if abs(loss_change) < 1e-6:
-                print(f"  LEARNING STATUS: STUCK (loss not changing)")
+                print(f"\n  ✗ LEARNING STATUS: STUCK (loss not changing)")
             elif loss_change > 0:
-                print(f"  LEARNING STATUS: IMPROVING (loss decreased by {loss_change:.6f})")
+                print(f"\n  ✓ LEARNING STATUS: IMPROVING (loss decreased by {loss_change:.6f})")
             else:
-                print(f"  LEARNING STATUS: DEGRADING (loss increased by {-loss_change:.6f})")
-
-        print(f"  RayBNN Entropy: {avg_entropy:.4f}/2.303 ({(avg_entropy/2.303)*100:.1f}% of max)")
-        print(f"  Learning Rate: {current_lr:.6f}")
+                print(f"\n  ⚠ LEARNING STATUS: DEGRADING (loss increased by {-loss_change:.6f})")
 
         # RayBNN learning progress
         if avg_entropy < 2.0:
-            print(f"  RayBNN showing learning progress! (entropy < 2.0)")
+            print(f"  ✓ RayBNN showing learning progress! (entropy < 2.0)")
         elif avg_entropy < 2.2:
-            print(f"  RayBNN showing some patterns (entropy < 2.2)")
+            print(f"  ✓ RayBNN showing some patterns (entropy < 2.2)")
         else:
-            print(f"  RayBNN still exploring (high entropy)")
+            print(f"  ✗ RayBNN still exploring (high entropy)")
+        
+        print("="*70 + "\n")
         
         # Early stopping check
         if avg_loss < best_loss:
@@ -785,25 +700,6 @@ def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
             print(f"\nEarly stopping triggered (no improvement for {early_stop_patience} epochs)")
             break
             
-        # CNN parameter analysis for key epochs      ###################
-        if epoch in [0, 1, 4, 9, 14] or epoch == max_epoch - 1:
-            print(f"\nPARAMETER UPDATE ANALYSIS (Epoch {epoch+1}):")
-            total_param_change = 0
-            for name, param in model.named_parameters():
-                if name in cnn_params_init:
-                    param_change = (param.detach() - cnn_params_init[name]).abs().mean().item()
-                    total_param_change += param_change
-                    
-                    status = "✓"
-                    if param_change < 1e-8:
-                        status = "💀 NO CHANGE"
-                    elif param_change < 1e-6:
-                        status = "⚠️ TINY CHANGE"
-                        
-                    print(f"  {name}: change={param_change:.2e} {status}")
-
-            print(f"  📊 Total parameter change: {total_param_change:.2e}")
-        
         print("-" * 60)
     
     # COMPREHENSIVE TRAINING SUMMARY
@@ -843,122 +739,27 @@ def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
     else:
         print(f"  POOR: RayBNN still random-like (entropy {epoch_raybnn_entropies[-1]:.3f})")
     
-
-    
-    # TEST 6: Check if RayBNN parameters changed after training
-    print("\n" + "="*60)
-    print("TEST 6: RayBNN Parameter Update Check (After Training)")
-    print("="*60)
-    
-    if raybnn_params_before is not None:
-        try:
-            network_params_obj_after = model.arch_search["neural_network"]["network_params"]
-            
-            # Try to convert after-training params to numpy
-            if isinstance(network_params_obj_after, np.ndarray):
-                raybnn_params_after = network_params_obj_after.copy()
-            elif hasattr(network_params_obj_after, 'to_numpy'):
-                raybnn_params_after = network_params_obj_after.to_numpy().copy()
-            elif isinstance(network_params_obj_after, dict):
-                for key in ['data', 'values', 'array', 'params']:
-                    if key in network_params_obj_after:
-                        temp = network_params_obj_after[key]
-                        if isinstance(temp, np.ndarray):
-                            raybnn_params_after = temp.copy()
-                            break
-                        elif isinstance(temp, (list, tuple)):
-                            # Convert list/tuple to numpy array
-                            try:
-                                raybnn_params_after = np.array(temp, dtype=np.float32).copy()
-                                # Reshape if shape is provided
-                                if 'shape' in network_params_obj_after:
-                                    shape = network_params_obj_after['shape']
-                                    if isinstance(shape, (list, tuple)):
-                                        raybnn_params_after = raybnn_params_after.reshape(shape)
-                                break
-                            except:
-                                pass
-                else:
-                    raybnn_params_after = None
-            else:
-                try:
-                    raybnn_params_after = np.array(network_params_obj_after, dtype=np.float32).copy()
-                except:
-                    raybnn_params_after = None
-            
-            if isinstance(raybnn_params_after, np.ndarray) and isinstance(raybnn_params_before, np.ndarray):
-                # Compare parameters
-                param_diff = np.abs(raybnn_params_after - raybnn_params_before)
-                mean_change = param_diff.mean()
-                max_change = param_diff.max()
-                changed_fraction = (param_diff > 1e-6).sum() / param_diff.size
-                
-                print(f"RayBNN network_params comparison:")
-                print(f"  Mean absolute change: {mean_change:.6e}")
-                print(f"  Max absolute change: {max_change:.6e}")
-                print(f"  Fraction of params changed (>1e-6): {changed_fraction:.3f} ({changed_fraction*100:.1f}%)")
-                
-                # Check if parameters are identical
-                are_identical = np.allclose(raybnn_params_before, raybnn_params_after, atol=1e-6)
-                
-                print("\n" + "-"*60)
-                if are_identical:
-                    print("CRITICAL: RayBNN parameters DID NOT CHANGE!")
-                    print("  → RayBNN is NOT learning during training")
-                    print("  → This explains why outputs are uniform/random")
-                    print("  → RayBNN needs to be trained separately first")
-                elif changed_fraction < 0.1:
-                    print(f"WARNING: Only {changed_fraction*100:.1f}% of parameters changed")
-                    print("  → RayBNN is barely learning")
-                    print("  → May need more training or different learning rate")
-                elif mean_change < 1e-5:
-                    print("WARNING: RayBNN parameters changed but very little")
-                    print(f"  → Mean change: {mean_change:.6e} (very small)")
-                    print("  → RayBNN learning is too slow")
-                else:
-                    print("RayBNN parameters ARE updating")
-                    print(f"  → Mean change: {mean_change:.6e}")
-                    print(f"  → {changed_fraction*100:.1f}% of parameters changed")
-                    print("  → RayBNN is learning!")
-                
-                # Show parameter statistics
-                print("\nParameter statistics:")
-                print(f"  Before: mean={raybnn_params_before.mean():.6e}, std={raybnn_params_before.std():.6e}")
-                print(f"  After:  mean={raybnn_params_after.mean():.6e}, std={raybnn_params_after.std():.6e}")
-                
-            else:
-                print("Cannot compare as numpy arrays")
-                print(f"  Before type: {type(raybnn_params_before)}")
-                print(f"  After type: {type(raybnn_params_after)}")
-                
-                # Try object identity check
-                if raybnn_params_before is network_params_obj_after:
-                    print("  → Objects are the SAME (same memory location)")
-                    print("  → RayBNN parameters likely NOT updated")
-                elif raybnn_params_before == network_params_obj_after:
-                    print("  → Objects have EQUAL values")
-                    print("  → RayBNN parameters likely NOT updated")
-                else:
-                    print("  → Objects are DIFFERENT")
-                    print("  → RayBNN parameters may have been updated")
-                    print("  → But cannot quantify the change without numpy conversion")
-                
-        except Exception as e:
-            print(f"Error checking RayBNN parameters: {e}")
-            import traceback
-            traceback.print_exc()
-    else:
-        print("Could not check RayBNN parameters (initial extraction failed)")
-    
     print("="*60 + "\n")
     
+    if alpha0 != 0 and lr !=0:
+        mode = "cnn+raybnn_training"
+        title_suffix = "Training Both CNN and RayBNN"
+    elif alpha0 == 0 and current_lr != 0:
+        mode = "train_cnn_freeze_raybnn"
+        title_suffix = "Training CNN, Freezing RayBNN"
+    elif alpha0 != 0 and current_lr == 0:
+        mode = "freeze_cnn_train_raybnn"
+        title_suffix = "Freezing CNN, Training RayBNN"
+    else:  # both == 0
+        mode = "freeze_both"
+        title_suffix = "Freezing Both CNN and RayBNN"
     # Plot training loss
     if epoch_losses:
         plt.figure(figsize=(10, 6))
         plt.plot(epoch_losses, label='Training Loss', marker='o')
         plt.xlabel('Epoch')
         plt.ylabel('Cross Entropy Loss')
-        plt.title('Training Loss of model when freeze CNN and train RayBNN')
+        plt.title(f'Training Loss - {title_suffix}')
         # Set x-axis ticks to integer values (spacing of 1)
         max_epoch = len(epoch_losses) - 1
         plt.xticks(np.arange(0, max_epoch + 1, 1))
@@ -968,12 +769,12 @@ def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
                  bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
         plt.legend()
         plt.grid(True)
-        plot_filename = "plot_freeze_cnn_train_raybnn.png"
+        plot_filename = f"plot_{mode}.png"
         plt.savefig(plot_filename)
         print(f"Loss plot saved to {plot_filename}")
         
         # Also try to parse batch-level losses from log file if it exists
-        log_file = "output_freeze_cnn_train_raybnn.txt"
+        log_file = f"output_{mode}.txt"
         if os.path.exists(log_file):
             batch_losses = []
             try:
@@ -989,14 +790,14 @@ def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
                     plt.plot(batch_losses, label='Batch Loss', alpha=0.6, linewidth=0.5)
                     plt.xlabel('Batch')
                     plt.ylabel('Cross Entropy Loss')
-                    plt.title('Batch-Level Training Loss of of model when freeze CNN and train RayBNN')
+                    plt.title(f'Batch-Level Training Loss - {title_suffix}')
                     final_batch_loss = batch_losses[-1]
                     plt.text(0.02, 0.95, f'Final batch loss: {final_batch_loss:.4f}',
                              transform=plt.gca().transAxes, fontsize=10,
                              bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
                     plt.legend()
                     plt.grid(True)
-                    batch_plot_filename = "cnn_batch_freeze_cnn_train_raybnn.png"
+                    batch_plot_filename = f"batch_{mode}.png"
                     plt.savefig(batch_plot_filename)
                     print(f"Batch-level loss plot saved to {batch_plot_filename}")
             except Exception as e:
@@ -1005,15 +806,10 @@ def train_ete_model(model, x_train, y_train,batch_size,  max_epoch):
     return model
 
 
-
-
-
-if __name__ == '__main__':
-    # Set this flag to run Test 7 or normal training
+if __name__ == '__main__':    
     
-    
-    end_to_end_model, x_train_tensor, y_train_tensor = main()
+    end_to_end_model, x_train_tensor, y_train_tensor , alpha0= main()
 
-    trained_model = train_ete_model(end_to_end_model, x_train_tensor, y_train_tensor, batch_size=1000, max_epoch=5)
+    trained_model = train_ete_model(end_to_end_model, x_train_tensor, y_train_tensor,alpha0 , batch_size=1000, max_epoch=7)
     print("Done without errors!")
     
