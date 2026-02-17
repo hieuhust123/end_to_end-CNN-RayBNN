@@ -121,49 +121,37 @@ def main():
 	stop_epoch = 100000
 	stop_train_loss = 0.005
 
-	max_alpha = 0.01
+	max_alpha = 0.001
 
 	exit_counter_threshold = 100000
 	shuffle_counter_threshold = 200
 
 
 	#Train Neural Network
-	print("\n=== Starting Training ===")
-	try:
-		arch_search = raybnn_python.train_network(
-			train_x,
-			train_y,
+	arch_search = raybnn_python.train_network(
+		train_x,
+		train_y,
 
-			crossval_x,
-			crossval_y,
+		crossval_x,
+		crossval_y,
 
-			stop_strategy,
-			lr_strategy,
-			lr_strategy2,
+		stop_strategy,
+		lr_strategy,
+		lr_strategy2,
 
-			loss_function,
-		
-			max_epoch,
-			stop_epoch,
-			stop_train_loss,
+		loss_function,
+	  
+		max_epoch,
+		stop_epoch,
+		stop_train_loss,
 
-			max_alpha,
-		
-			exit_counter_threshold,
-			shuffle_counter_threshold,
+		max_alpha,
+	  
+		exit_counter_threshold,
+		shuffle_counter_threshold,
 
-			arch_search
-		)
-		print("=== Training Completed Successfully ===\n")
-	
-	except Exception as e:
-		print(f"ERROR during training: {e}")
-		return
-	if arch_search is None:
-		print("ERROR: arch_search is None after training!")
-		return
-	
-	print("=== Starting Test Data Preparation ===")
+		arch_search
+	)
 	test_x = np.zeros((input_size,batch_size,traj_size,testing_samples)).astype(np.float32)
 	test_y = np.zeros((output_size,batch_size,traj_size,testing_samples)).astype(np.float32)
 	print(f"test_x shape: {test_x.shape}")
@@ -189,31 +177,18 @@ def main():
 	print("=== Test data prepared. Starting inference ===\n")
 
 	#Test Neural Network
-	try:
-		output_y, test_loss = raybnn_python.test_network(
-			test_x,
-			test_y,
-			arch_search
-		)
-		print(f"Test Loss: {test_loss}")
-	except Exception as e:
-		print(f"ERROR during testing: {e}")
-		import traceback
-		traceback.print_exc()
-		return
+	output_y = raybnn_python.test_network(
+		test_x,
 
-	if output_y is None:
-		print("ERROR: output_y is None!")
-		return
+		arch_search
+	)
+	#print(output_y.shape)
+
 	pred = []
 	for i in range(x_test.shape[0]):
 		j = (i % batch_size)
 		k = int(i/batch_size)
 
-		if k >= output_y.shape[3]:
-			print(f"WARNING: k={k} exceeds output_y batch dimension {output_y.shape[3]}")
-			break
-			
 		sample = output_y[:, j , 0, k ]
 		#print(sample)
 

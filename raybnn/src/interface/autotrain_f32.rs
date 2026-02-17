@@ -526,15 +526,11 @@ pub fn train_network(
 	let mut batch_idx = 0;
 	let epoch_num = traindata_X.len() as u64;
 
-
-
-
-
-
+		// problem of dims in this line???
 	X =  arrayfire::Array::new(&traindata_X[&batch_idx], train_X_dims);
 
 	Y = arrayfire::Array::new(&traindata_Y[&batch_idx], Y_dims);
-	// println!("[TRAIN_NETWORK_autotrain.rs]input arrayfire training shape: {:?}", X);
+	println!("[TRAIN_NETWORK_autotrain.rs]input arrayfire training shape: {:?}", X);
     // let sample_elements = arrayfire::flat(&arrayfire::slice(&X, 0));
 	// af_print!("[TRAIN_NETWORK_autotrain.rs] Input arrayfire training first 10 elements: ", sample_elements);
 
@@ -728,7 +724,10 @@ pub fn train_network(
 	for i in 0..max_epoch
 	{
 		batch_idx = i % epoch_num;
-
+		// if batch_idx >= epoch_num {
+        // println!("ERROR: batch_idx {} >= epoch_num {}", batch_idx, epoch_num);
+        // break;
+    
 		X =  arrayfire::Array::new(&traindata_X[&batch_idx], train_X_dims);
 
 		Y = arrayfire::Array::new(&traindata_Y[&batch_idx], Y_dims);

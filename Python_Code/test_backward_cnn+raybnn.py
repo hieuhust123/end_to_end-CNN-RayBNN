@@ -71,19 +71,19 @@ def main():
             
     ## Parameter setting for Fashion and MNIST dataset
     dir_path = "/tmp/"
-    max_input_size = 256
-    input_size = 256
+    max_input_size = 784
+    input_size = 784
 
     max_output_size = 10
     output_size = 10
 
-    max_neuron_size = 5000
+    max_neuron_size = 2000
 
     batch_size = 1000
     traj_size = 1
 
     proc_num = 2
-    active_size = 2500
+    active_size = 1000
 
     training_samples = 60
     crossval_samples = 60
@@ -130,17 +130,17 @@ def main():
     class CNN(nn.Module):
         def __init__(self):
             super (CNN, self).__init__()
-            self.conv1 = nn.Conv2d(in_channels=1, out_channels=128, 
+            self.conv1 = nn.Conv2d(in_channels=1, out_channels=12, 
             kernel_size=3, stride=1, padding=1)
             self.pool = nn.MaxPool2d(kernel_size=2)
-            self.conv2 = nn.Conv2d(in_channels=128, out_channels=64, 
+            self.conv2 = nn.Conv2d(in_channels=12, out_channels=64, 
             kernel_size=3, stride=1, padding=1)
             self.conv3 = nn.Conv2d(in_channels=64, out_channels=16,
             kernel_size=3, stride=1, padding=1)
             self.drop = nn.Dropout2d(p=0.1)  # changed to 0.1
 
             # # just added
-            self.projection = nn.Linear(784, 256)
+            #self.projection = nn.Linear(784, 256)
             # self.bn = nn.BatchNorm1d(200)
 
         def forward(self, raw_images, y_labels, verbose=False):
@@ -163,7 +163,7 @@ def main():
             x=F.relu(x)
             if verbose:
                 print("After conv3 + ReLU: ", x.shape) # torch.Size([1000, 16, 7, 7])
-            x=self.drop(x)
+
 
 
             # Dropout behavior depends on model.training:
@@ -178,11 +178,11 @@ def main():
                 print("After flattening: ", features_flat.shape) # 16x7x7=784
             
             # # Apply projection
-            features_reduced = self.projection(features_flat)
-            if verbose:
-                print("After projection: ", features_reduced.shape) # torch.Size([1000, 200])
+            # features_reduced = self.projection(features_flat)
+            # if verbose:
+            #     print("After projection: ", features_reduced.shape) # torch.Size([1000, 200])
             # features_normalized = self.bn(features_reduced) # Apply BN here
-            return features_reduced
+            return features_flat
 
     class AutoGradEndtoEnd(torch.autograd.Function):
 
@@ -245,18 +245,18 @@ def main():
             # Check predictions
             preds = Yhat.argmax(dim=1)
             probs = torch.softmax(Yhat, dim=1)
-            print(f"probs: {probs}")
+            #print(f"probs: {probs}")
             # Sample outputs for inspection
-            print(f"\nSample outputs (first 5 samples):")
+            #print(f"\nSample outputs (first 5 samples):")
             for i in range(min(5, Yhat.shape[0])):
                 pred_class = preds[i].item()
                 confidence = probs[i, pred_class].item()
                 true_label = y_labels[i].item() if i < y_labels.shape[0] else 'N/A'
-                print(f"  Sample {i}: predicted={pred_class}, "
-                      f"confidence={confidence:.3f}, "
-                      f"true_label={true_label}")
+                # print(f"  Sample {i}: predicted={pred_class}, "
+                #       f"confidence={confidence:.3f}, "
+                #       f"true_label={true_label}")
             
-            print("="*60 + "\n")
+            print("="*50 + "\n")
 
             # Store entropy for epoch tracking
             probs = torch.softmax(Yhat, dim=1)
@@ -308,12 +308,13 @@ def main():
                     train_x, train_y, traj_size, max_epoch, alpha0, arch_search, current_epoch
                 )
                 print("grad_result shape: ", grad_result.shape)
-                grad_result_reshaped = grad_result[:, :, 0, 0].T     
-                print("grad_result_reshaped shape: ", grad_result_reshaped.shape)
 
-                # Convert grad_result to numpy array if needed
+                # Convert grad_result to numpy array if needed (BEFORE using it)
                 if not isinstance(grad_result, np.ndarray):
                     grad_result = np.array(grad_result, dtype=np.float32)
+
+                grad_result_reshaped = grad_result[:, :, 0, 0].T     
+                print("grad_result_reshaped shape: ", grad_result_reshaped.shape)
                 
                 # grad_result = grad_result * 1000.0  # Multiply by 1000x
 
@@ -324,6 +325,39 @@ def main():
                 assert grad_features.shape == features_flat.shape, \
                 f"Gradient shape {grad_features.shape} doesn't match features {features_flat.shape}"
 
+                # === Print RayBNN Gradient before go back to CNN ===
+                print("\n" + "="*70)
+                print(f"DIAGNOSTIC: RayBNN Gradient → CNN (Epoch {current_epoch})")
+                print("="*70)
+                print(f"  Shape: {grad_features.shape}")
+                print(f"  Mean: {grad_features.mean().item():.8f}")
+                print(f"  Std: {grad_features.std().item():.8f}")
+                print(f"  Max: {grad_features.max().item():.8f}")
+                print(f"  Min: {grad_features.min().item():.8f}")
+                # KEY CHECK: Is RayBNN using grad_output at all?
+                # Compare magnitude of RayBNN gradient vs upstream gradient
+                upstream_magnitude = grad_output.abs().mean().item()
+                raybnn_grad_magnitude = grad_features.abs().mean().item()
+                print(f"\n  Upstream grad magnitude (from loss): {upstream_magnitude:.8f}")
+                print(f"  RayBNN grad magnitude (to CNN):      {raybnn_grad_magnitude:.8f}")
+                print(f"  Ratio (RayBNN/upstream):              {raybnn_grad_magnitude / (upstream_magnitude + 1e-12):.4f}")
+                
+                # Check if gradient varies per sample (or is identical for all)
+                grad_per_sample_norm = grad_features.norm(dim=1)
+                print(f"\n  Per-sample gradient norm std: {grad_per_sample_norm.std().item():.8f}")
+                if grad_per_sample_norm.std().item() < 1e-8:
+                    print("  ✗ CRITICAL: All samples get identical gradients!")
+                    print("    RayBNN backward is NOT differentiating between samples")
+                else:
+                    print("  ✓ Gradients vary across samples")
+                
+                # Check correlation between gradient and features
+                correlation = torch.corrcoef(
+                    torch.stack([grad_features.flatten(), features_flat.flatten()])
+                )[0, 1].item()
+                print(f"  Gradient-feature correlation: {correlation:.6f}")
+                print("="*70 + "\n")
+
                 print("\n Backward pass completed!")
             except Exception as e:
                 print(f"[AUTOGRAD BACKWARD] Error calling RayBNN backward: {e}")
@@ -333,7 +367,7 @@ def main():
                 grad_features = torch.zeros_like(features_flat)  # Create fallback gradient
                 print("[AUTOGRAD BACKWARD] Using zero gradients as fallback")
             
-            return grad_features, None,None,None,None,None,None, None, None, None
+            return grad_features, None, None, None, None, None, None, None, None
 
     class EndtoEndTrainer (nn.Module):
         def __init__(self, batch_size, traj_size, max_epoch, input_size, output_size, training_samples, alpha0):
@@ -356,7 +390,30 @@ def main():
         def forward(self, raw_images, y_labels, verbose=True):
         # Step 1: CNN forward pass using your existing CNN class
             features = self.cnn(raw_images, y_labels, verbose)
-
+            
+            # Print CNN Output (Features) Before RayBNN ===
+            if verbose:
+                print("\n" + "="*70)
+                print("DIAGNOSTIC: CNN Features BEFORE entering RayBNN")
+                print("="*70)
+                print(f"  Shape: {features.shape}")
+                print(f"  Mean: {features.mean().item():.6f}")
+                print(f"  Std: {features.std().item():.6f}")
+                print(f"  Min: {features.min().item():.6f}")
+                print(f"  Max: {features.max().item():.6f}")
+                #print(f"  % zeros: {(features == 0).sum().item() / features.numel() * 100:.2f}%")
+                print(f"  requires_grad: {features.requires_grad}")
+                # print(f"  grad_fn: {features.grad_fn}")
+                # Check if features are discriminative (different inputs → different features)
+                feature_variance_per_sample = features.var(dim=0).mean().item()
+                feature_variance_per_feature = features.var(dim=1).mean().item()
+                print(f"  Variance across samples (per feature): {feature_variance_per_sample:.6f}")
+                print(f"  Variance across features (per sample): {feature_variance_per_feature:.6f}")
+                if feature_variance_per_sample < 1e-6:
+                    print("  ✗ CRITICAL: All samples produce nearly identical features!")
+                else:
+                    print("  ✓ Features vary across samples")
+                print("="*70 + "\n")
             output = AutoGradEndtoEnd.apply(
                 features, # NORMALIZED CNN features for stability
                 y_labels,          # labels
@@ -377,9 +434,9 @@ def main():
     return end_to_end_model, x_train_tensor, y_train_tensor, alpha0
 
 
-def train_ete_model(model, x_train, y_train,alpha0, batch_size, max_epoch):
+def train_ete_model(model, x_train, y_train, alpha0, batch_size, max_epoch, mode="both"):
     
-    # ========== AREA 1 DIAGNOSTIC: CNN Parameter Updates ==========
+    # ========== AREA 1 Print CNN Parameter Updates ==========
     print("\n" + "="*70)
     print("AREA 1 DIAGNOSTIC: Checking CNN Parameter Updates")
     print("="*70)
@@ -398,39 +455,67 @@ def train_ete_model(model, x_train, y_train,alpha0, batch_size, max_epoch):
         print(f"  Std: {param.std().item():.6f}")
         print(f"  Min/Max: [{param.min().item():.6f}, {param.max().item():.6f}]")
     
-    # Setup optimizer first to check parameter inclusion
-    for param in model.cnn.parameters():
-        param.requires_grad = True
-    lr = 0.0001
-    optimizer = torch.optim.Adam(model.parameters(), lr)
+    ## Mode Parameter
+    # mode: "both" - Train CNN + RayBNN
+    # mode: "cnn_only" - Train CNN, freeze RayBNN (alpha0=0)
+    # mode: "raybnn_only" - Freeze CNN, train RayBNN only
+    # mode: "frozen" - Freeze both (sanity check)
+    if mode == "cnn_only":
+        for param in model.cnn.parameters():
+            param.requires_grad = True
+        lr = 0.001
+        alpha0 = 0.0 # Freeze RayBNN
+        print(f"MODE: Train CNN only with CNN_lr={lr}, RayBNN_lr={alpha0}")
+
+    elif mode =="raybnn_only":
+        for param in model.cnn.parameters():
+            param.requires_grad = False
+        lr = 0.0
+        print(f"MODE: Train RayBNN only with lr={alpha0}, CNN_lr={lr})")
+    
+    elif mode == "frozen":
+        for param in model.cnn.parameters():
+            param.requires_grad = False
+        lr = 0.0
+        alpha0 = 0.0
+        print(f"MODE: Both frozen (lr={lr}, alpha0={alpha0})")
+
+    else:
+        for param in model.cnn.parameters():
+            param.requires_grad = True
+        lr = 0.001
+        # alpha0 stays as passed in
+        print(f"MODE: Train both (lr={lr}, alpha0={alpha0})")
+
+    # Propagate alpha0 to model so backward() uses the mode-adjusted value
+    model.alpha0 = alpha0
+
+    optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], 
+        lr=lr
+    ) if lr > 0 else None
     criterion = torch.nn.CrossEntropyLoss()
     
     # Check if CNN parameters are in optimizer
-    print("\n=== CNN Parameters in Optimizer Check ===")
-    optimizer_param_ids = set(id(p) for group in optimizer.param_groups for p in group['params'])
-    cnn_param_ids = {name: id(param) for name, param in model.cnn.named_parameters()}
-    
-    for name, param_id in cnn_param_ids.items():
-        in_optimizer = param_id in optimizer_param_ids
-        status = "✓ YES" if in_optimizer else "✗ NO"
-        print(f"{name}: {status}")
-    
-    all_in_optimizer = all(param_id in optimizer_param_ids for param_id in cnn_param_ids.values())
-    if all_in_optimizer:
-        print("\n✓ ALL CNN parameters are in optimizer")
+    if optimizer:
+        print("\n=== CNN Parameters in Optimizer Check ===")
+        optimizer_param_ids = set(id(p) for group in optimizer.param_groups for p in group['params'])
+        cnn_param_ids = {name: id(param) for name, param in model.cnn.named_parameters()}
+        
+        for name, param_id in cnn_param_ids.items():
+            in_optimizer = param_id in optimizer_param_ids
+            status = "✓ YES" if in_optimizer else "✗ NO"
+            print(f"{name}: {status}")
+        
+        all_in_optimizer = all(param_id in optimizer_param_ids for param_id in cnn_param_ids.values())
+        if all_in_optimizer:
+            print("\n✓ ALL CNN parameters are in optimizer")
+        else:
+            print("\n✗ WARNING: Some CNN parameters NOT in optimizer!")
     else:
-        print("\n✗ WARNING: Some CNN parameters NOT in optimizer!")
+        print("\n=== No optimizer (lr=0) — CNN parameters frozen ===")
     
     print("="*70 + "\n")
     
-    # Training tracking
-    epoch_losses = []
-    epoch_accuracies = []
-    epoch_raybnn_entropies = []
-    best_loss = float('inf')
-    epoch_times = []  
-    patience_counter = 0
-    early_stop_patience = 5
     print("x train shape: ",x_train.shape)  # torch.Size([60000, 1, 28, 28])
     print("y train shape: ", y_train.shape) # torch.Size([60000])
     
@@ -460,16 +545,19 @@ def train_ete_model(model, x_train, y_train,alpha0, batch_size, max_epoch):
             batch_x = x_train[start_idx:start_idx+batch_size]
             batch_y = y_train[start_idx:start_idx+batch_size]
 
-            optimizer.zero_grad()
+            if optimizer:
+                optimizer.zero_grad()
 
             # Reduce verbosity - only verbose for first batch of each epoch
             verbose = (i == 0 and epoch < 3)  # Only first 3 epochs, first batch
             output = model(batch_x, batch_y, verbose=verbose)
             
-            # ========== AREA 4 DIAGNOSTIC: Output Analysis ==========
+            
+            
+            # ========== AREA 4: Print RayBNN Output Analysis ==========
             if i == 0:  # First batch of each epoch
                 print("\n" + "="*70)
-                print(f"AREA 4 DIAGNOSTIC: RayBNN Output Analysis (Epoch {epoch+1}, Batch {i})")
+                print(f"AREA 4 DIAGNOSTIC: Model Final Output Analysis (Epoch {epoch+1}, Batch {i})")
                 print("="*70)
                 
                 with torch.no_grad():
@@ -478,7 +566,7 @@ def train_ete_model(model, x_train, y_train,alpha0, batch_size, max_epoch):
                     print(f"  Range: [{output.min().item():.4f}, {output.max().item():.4f}]")
                     print(f"  Mean: {output.mean().item():.4f}")
                     print(f"  Std: {output.std().item():.4f}")
-                    print(f"  Variance: {output.var().item():.4f}")
+                    # print(f"  Variance: {output.var().item():.4f}")
                     
                     # Check if output is changing
                     if epoch == 0:
@@ -499,14 +587,6 @@ def train_ete_model(model, x_train, y_train,alpha0, batch_size, max_epoch):
                     print(f"\nPrediction Analysis:")
                     print(f"  Predicted classes (first 20): {preds[:20].tolist()}")
                     print(f"  True labels (first 20): {batch_y[:20].tolist()}")
-                    
-                    # # Check prediction diversity
-                    # unique_preds = torch.unique(preds)
-                    # print(f"  Unique predictions: {len(unique_preds)}/10 classes")
-                    # if len(unique_preds) < 5:
-                    #     print(f"  ✗ WARNING: Model predicting only {len(unique_preds)} classes!")
-                    # else:
-                    #     print(f"  ✓ Good prediction diversity")
                     
                     # Confidence analysis
                     max_probs = probs.max(dim=1)[0]
@@ -530,18 +610,19 @@ def train_ete_model(model, x_train, y_train,alpha0, batch_size, max_epoch):
             
             loss = criterion(output, batch_y)
             
-            # CRITICAL FIX 7: Loss explosion detection
+            # CRITICAL FIX: Loss explosion detection
             if loss.item() > 10.0 or torch.isnan(loss) or torch.isinf(loss):
                 print(f"LOSS EXPLOSION DETECTED: {loss.item():.3f}")
                 print("Stopping training to prevent further damage")
                 return model  # Early termination
 
-            loss.backward()
+            if mode in ("both", "cnn_only"):
+                loss.backward()
             
-            # ========== AREA 2 DIAGNOSTIC: Gradient Analysis ==========
+            # ========== AREA 2: Print Gradient Analysis ==========
             if i == 0:  # First batch of each epoch
                 print("\n" + "="*70)
-                print(f"AREA 2 DIAGNOSTIC: Gradient Flow Analysis (Epoch {epoch+1}, Batch {i})")
+                print(f"AREA 2 DIAGNOSTIC: CNN Parameters Gradients computed during backprop of (Epoch {epoch+1}, Batch {i})")
                 print("="*70)
                 
                 print("\n=== CNN Gradients ===")
@@ -557,10 +638,8 @@ def train_ete_model(model, x_train, y_train,alpha0, batch_size, max_epoch):
                         print(f"  Gradient min: {grad_min:.8f}")
                         
                         # Diagnose gradient issues
-                        if grad_mean < 1e-10:
-                            print(f"  ✗ CRITICAL: Vanishing gradients! (mean < 1e-10)")
-                        elif grad_mean < 1e-6:
-                            print(f"  ⚠ WARNING: Very small gradients (mean < 1e-6)")
+                        if grad_mean < 1e-6:
+                            print(f"  ✗ CRITICAL: Vanishing gradients! (mean < 1e-6)")                       
                         elif grad_mean > 1.0:
                             print(f"  ⚠ WARNING: Large gradients (mean > 1.0)")
                         else:
@@ -574,7 +653,8 @@ def train_ete_model(model, x_train, y_train,alpha0, batch_size, max_epoch):
                 
                 print("\n" + "="*70 + "\n")
 
-            optimizer.step()
+            if optimizer:
+                optimizer.step()
 
             # Accumulate metrics
             epoch_loss += loss.item()
@@ -592,217 +672,6 @@ def train_ete_model(model, x_train, y_train,alpha0, batch_size, max_epoch):
             if i % 10 == 0 or i == 0:  # Print every 10 batches
                 print(f"  Batch {i}/{batch_idx}: loss={loss.item():.4f}, acc={current_acc:.3f}, entropy={entropy:.3f}")
 
-        # ========== AREA 1 DIAGNOSTIC: Parameter Change Analysis ==========
-        print("\n" + "="*70)
-        print(f"AREA 1 DIAGNOSTIC: CNN Parameter Changes (End of Epoch {epoch+1})")
-        print("="*70)
-        
-        total_change = 0.0
-        max_change = 0.0
-        min_change = float('inf')
-        
-        print("\n=== Parameter Updates ===")
-        for name, param in model.cnn.named_parameters():
-            param_init = cnn_params_init[name]
-            change = (param - param_init).abs().mean().item()
-            rel_change = change / (param_init.abs().mean().item() + 1e-10)
-            
-            total_change += change
-            max_change = max(max_change, change)
-            min_change = min(min_change, change)
-            
-            print(f"\n{name}:")
-            print(f"  Absolute change: {change:.8f}")
-            print(f"  Relative change: {rel_change:.8f}")
-            print(f"  Current mean: {param.mean().item():.6f}")
-            print(f"  Initial mean: {param_init.mean().item():.6f}")
-            
-            # Diagnose parameter update issues
-            if change < 1e-10:
-                print(f"  ✗ CRITICAL: Parameters NOT updating! (change < 1e-10)")
-            elif change < 1e-6:
-                print(f"  ⚠ WARNING: Very small updates (change < 1e-6)")
-            else:
-                print(f"  ✓ Parameters are updating")
-        
-        avg_change = total_change / len(cnn_params_init)
-        print(f"\n=== Summary ===")
-        print(f"Average parameter change: {avg_change:.8f}")
-        print(f"Max parameter change: {max_change:.8f}")
-        print(f"Min parameter change: {min_change:.8f}")
-        
-        if avg_change < 1e-8:
-            print(f"\n✗ CRITICAL ISSUE: CNN parameters barely changing!")
-            print(f"   Possible causes:")
-            print(f"   1. Learning rate too small (current: {lr})")
-            print(f"   2. Gradients vanishing (check AREA 2)")
-            print(f"   3. RayBNN not passing gradients back")
-        elif avg_change > 0.1:
-            print(f"\n⚠ WARNING: Very large parameter changes (might be unstable)")
-        else:
-            print(f"\n✓ CNN parameters updating at healthy rate")
-        
-        print("="*70 + "\n")
-
-        # End of epoch statistics
-        avg_loss = epoch_loss / batch_idx
-        epoch_accuracy = epoch_correct / epoch_total
-        avg_entropy = sum(batch_entropies) / len(batch_entropies) if batch_entropies else 2.303
-        epoch_time = time.time() - epoch_start_time
-        
-        # Store metrics
-        epoch_losses.append(avg_loss)
-        epoch_accuracies.append(epoch_accuracy)
-        epoch_raybnn_entropies.append(avg_entropy)
-        epoch_times.append(epoch_time)
-        
-        current_lr = optimizer.param_groups[0]['lr']
-        
-        # Enhanced Epoch Summary
-        print(f"\n{'='*70}")
-        print(f"EPOCH {epoch+1} SUMMARY")
-        print(f"{'='*70}")
-        print(f"  Time: {epoch_time:.1f}s")
-        print(f"  Loss: {avg_loss:.6f} (change: {avg_loss - epoch_losses[-2] if len(epoch_losses) > 1 else 'N/A'})")
-        print(f"  Accuracy: {epoch_accuracy:.4f} ({epoch_accuracy*100:.1f}%)")
-        print(f"  RayBNN Entropy: {avg_entropy:.4f}")
-        print(f"  Learning Rate: {current_lr:.6f}")
-        print(f"  Alpha0 (RayBNN): {alpha0:.6f}")
-
-        # Learning progress check
-        if len(epoch_losses) > 1:
-            loss_change = epoch_losses[-2] - avg_loss
-            if abs(loss_change) < 1e-6:
-                print(f"\n  ✗ LEARNING STATUS: STUCK (loss not changing)")
-            elif loss_change > 0:
-                print(f"\n  ✓ LEARNING STATUS: IMPROVING (loss decreased by {loss_change:.6f})")
-            else:
-                print(f"\n  ⚠ LEARNING STATUS: DEGRADING (loss increased by {-loss_change:.6f})")
-
-        # RayBNN learning progress
-        if avg_entropy < 2.0:
-            print(f"  ✓ RayBNN showing learning progress! (entropy < 2.0)")
-        elif avg_entropy < 2.2:
-            print(f"  ✓ RayBNN showing some patterns (entropy < 2.2)")
-        else:
-            print(f"  ✗ RayBNN still exploring (high entropy)")
-        
-        print("="*70 + "\n")
-        
-        # Early stopping check
-        if avg_loss < best_loss:
-            best_loss = avg_loss
-            patience_counter = 0
-        else:
-            patience_counter += 1
-            
-        if patience_counter >= early_stop_patience:
-            print(f"\nEarly stopping triggered (no improvement for {early_stop_patience} epochs)")
-            break
-            
-        print("-" * 60)
-    
-    # COMPREHENSIVE TRAINING SUMMARY
-    print(f"\n{'='*50}")
-    print("TRAINING COMPLETE - COMPREHENSIVE SUMMARY")
-    print(f"{'='*50}")
-    
-    print(f"FINAL METRICS:")
-    print(f"Epochs completed: {len(epoch_losses)}")
-    print(f"Total training time: {sum(epoch_times):.1f}s")
-    print(f"Final loss: {epoch_losses[-1]:.4f}")
-    print(f"Loss improvement: {epoch_losses[0] - epoch_losses[-1]:.4f} ({((epoch_losses[0] - epoch_losses[-1])/epoch_losses[0]*100):.1f}%)")
-    print(f"Final accuracy: {epoch_accuracies[-1]:.4f} ({epoch_accuracies[-1]*100:.1f}%)")
-    print(f"Accuracy improvement: {epoch_accuracies[-1] - epoch_accuracies[0]:.4f} ({(epoch_accuracies[-1] - epoch_accuracies[0])*100:.1f} percentage points)")
-    print(f"Final RayBNN entropy: {epoch_raybnn_entropies[-1]:.4f}/2.303")
-    
-    # Learning progress analysis
-    print(f"\nLEARNING ANALYSIS:")
-    if epoch_losses[0] - epoch_losses[-1] > 0.1:
-        print(f"  EXCELLENT: Significant loss reduction ({((epoch_losses[0] - epoch_losses[-1])/epoch_losses[0]*100):.1f}%)")
-    elif epoch_losses[0] - epoch_losses[-1] > 0.05:
-        print(f"  GOOD: Moderate loss reduction ({((epoch_losses[0] - epoch_losses[-1])/epoch_losses[0]*100):.1f}%)")
-    else:
-        print(f"  POOR: Minimal loss reduction ({((epoch_losses[0] - epoch_losses[-1])/epoch_losses[0]*100):.1f}%)")
-    
-    if epoch_accuracies[-1] > 0.5:
-        print(f"  EXCELLENT: High accuracy achieved ({epoch_accuracies[-1]*100:.1f}%)")
-    elif epoch_accuracies[-1] > 0.3:
-        print(f"  GOOD: Decent accuracy ({epoch_accuracies[-1]*100:.1f}%)")
-    else:
-        print(f"  POOR: Low accuracy ({epoch_accuracies[-1]*100:.1f}%)")
-    
-    if epoch_raybnn_entropies[-1] < 2.0:
-        print(f"  EXCELLENT: RayBNN learned meaningful patterns (entropy {epoch_raybnn_entropies[-1]:.3f})")
-    elif epoch_raybnn_entropies[-1] < 2.2:
-        print(f"  GOOD: RayBNN showing some learning (entropy {epoch_raybnn_entropies[-1]:.3f})")
-    else:
-        print(f"  POOR: RayBNN still random-like (entropy {epoch_raybnn_entropies[-1]:.3f})")
-    
-    print("="*60 + "\n")
-    
-    if alpha0 != 0 and lr !=0:
-        mode = "cnn+raybnn_training"
-        title_suffix = "Training Both CNN and RayBNN"
-    elif alpha0 == 0 and current_lr != 0:
-        mode = "train_cnn_freeze_raybnn"
-        title_suffix = "Training CNN, Freezing RayBNN"
-    elif alpha0 != 0 and current_lr == 0:
-        mode = "freeze_cnn_train_raybnn"
-        title_suffix = "Freezing CNN, Training RayBNN"
-    else:  # both == 0
-        mode = "freeze_both"
-        title_suffix = "Freezing Both CNN and RayBNN"
-    # Plot training loss
-    if epoch_losses:
-        plt.figure(figsize=(10, 6))
-        plt.plot(epoch_losses, label='Training Loss', marker='o')
-        plt.xlabel('Epoch')
-        plt.ylabel('Cross Entropy Loss')
-        plt.title(f'Training Loss - {title_suffix}')
-        # Set x-axis ticks to integer values (spacing of 1)
-        max_epoch = len(epoch_losses) - 1
-        plt.xticks(np.arange(0, max_epoch + 1, 1))
-        final_loss = epoch_losses[-1]
-        plt.text(0.02, 0.95, f'Final loss: {final_loss:.4f}',
-                 transform=plt.gca().transAxes, fontsize=10,
-                 bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
-        plt.legend()
-        plt.grid(True)
-        plot_filename = f"plot_{mode}.png"
-        plt.savefig(plot_filename)
-        print(f"Loss plot saved to {plot_filename}")
-        
-        # Also try to parse batch-level losses from log file if it exists
-        log_file = f"output_{mode}.txt"
-        if os.path.exists(log_file):
-            batch_losses = []
-            try:
-                with open(log_file, 'r') as f:
-                    for line in f:
-                        # Match format: "  Batch 0: loss=2.3026, acc=0.088"
-                        match = re.search(r"loss=([\d\.]+)", line)
-                        if match:
-                            batch_losses.append(float(match.group(1)))
-                
-                if batch_losses:
-                    plt.figure(figsize=(12, 6))
-                    plt.plot(batch_losses, label='Batch Loss', alpha=0.6, linewidth=0.5)
-                    plt.xlabel('Batch')
-                    plt.ylabel('Cross Entropy Loss')
-                    plt.title(f'Batch-Level Training Loss - {title_suffix}')
-                    final_batch_loss = batch_losses[-1]
-                    plt.text(0.02, 0.95, f'Final batch loss: {final_batch_loss:.4f}',
-                             transform=plt.gca().transAxes, fontsize=10,
-                             bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
-                    plt.legend()
-                    plt.grid(True)
-                    batch_plot_filename = f"batch_{mode}.png"
-                    plt.savefig(batch_plot_filename)
-                    print(f"Batch-level loss plot saved to {batch_plot_filename}")
-            except Exception as e:
-                print(f"Error parsing batch losses from log file: {e}")
-    
     return model
 
 
@@ -810,6 +679,8 @@ if __name__ == '__main__':
     
     end_to_end_model, x_train_tensor, y_train_tensor , alpha0= main()
 
-    trained_model = train_ete_model(end_to_end_model, x_train_tensor, y_train_tensor,alpha0 , batch_size=1000, max_epoch=7)
+    trained_model = train_ete_model(end_to_end_model, x_train_tensor, 
+    y_train_tensor,alpha0 , batch_size=1000, 
+    max_epoch=7, mode="raybnn_only")
     print("Done without errors!")
     

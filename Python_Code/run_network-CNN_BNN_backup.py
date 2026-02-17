@@ -50,6 +50,133 @@ class CNN(nn.Module):
         x = self.fc3(x)  
         return x, features
 
+def plot_cnn_training(train_losses, train_accs, test_losses, test_accs, fold=None):
+    """Plot CNN training metrics."""
+    epochs = range(1, len(train_losses) + 1)
+    
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    title_suffix = "" if fold is None else f" - Fold {fold}"
+    fig.suptitle(f'CNN Training Metrics{title_suffix}', fontsize=14)
+    
+    # Loss plot
+    axes[0].plot(epochs, train_losses, 'b-', label='Train Loss', linewidth=2)
+    if test_losses:
+        axes[0].plot(epochs, test_losses, 'r-', label='Val Loss', linewidth=2)
+    axes[0].set_xlabel('Epoch')
+    axes[0].set_ylabel('Loss')
+    axes[0].set_title('Loss over Epochs')
+    axes[0].legend()
+    axes[0].grid(True)
+    
+    # Accuracy plot
+    axes[1].plot(epochs, train_accs, 'b-', label='Train Accuracy', linewidth=2)
+    if test_accs:
+        axes[1].plot(epochs, test_accs, 'r-', label='Val Accuracy', linewidth=2)
+    axes[1].set_xlabel('Epoch')
+    axes[1].set_ylabel('Accuracy (%)')
+    axes[1].set_title('Accuracy over Epochs')
+    axes[1].legend()
+    axes[1].grid(True)
+    
+    plt.tight_layout()
+    fold_suffix = "" if fold is None else f"_fold{fold}"
+    plt.savefig(f'Xuan_Chen_cnn_training{fold_suffix}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f'CNN training plot saved to: Xuan_Chen_cnn_training{fold_suffix}.png')
+
+def plot_kfold_summary(accuracies, precisions, recalls, f1s):
+    """Plot summary of K-fold cross-validation results."""
+    n_folds = len(accuracies)
+    folds = range(1, n_folds + 1)
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    x = np.arange(n_folds)
+    width = 0.2
+    
+    ax.bar(x - 1.5*width, accuracies, width, label='Accuracy', alpha=0.8)
+    ax.bar(x - 0.5*width, precisions, width, label='Precision', alpha=0.8)
+    ax.bar(x + 0.5*width, recalls, width, label='Recall', alpha=0.8)
+    ax.bar(x + 1.5*width, f1s, width, label='F1 Score', alpha=0.8)
+    
+    ax.set_xlabel('Fold')
+    ax.set_ylabel('Score')
+    ax.set_title('10-Fold Cross-Validation Results (CNN)')
+    ax.set_xticks(x)
+    ax.set_xticklabels(folds)
+    ax.legend()
+    ax.grid(True, axis='y', alpha=0.3)
+    ax.set_ylim([0, 1])
+    
+    # Add statistics text
+    stats_text = (f"Avg Acc: {np.mean(accuracies):.4f} ± {np.std(accuracies):.4f}\n"
+                  f"Avg F1:  {np.mean(f1s):.4f} ± {np.std(f1s):.4f}")
+    ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, fontsize=10,
+            verticalalignment='top', family='monospace',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    
+    plt.tight_layout()
+    plt.savefig('kfold_summary.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print('K-fold summary plot saved to: kfold_summary.png')
+
+def plot_raybnn_training(accuracies, precisions, recalls, f1s, losses):
+    """Plot RayBNN training metrics over epochs."""
+    epochs = range(1, len(accuracies) + 1)
+    
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle('RayBNN Training Metrics', fontsize=14)
+    
+    # Accuracy
+    axes[0, 0].plot(epochs, accuracies, 'b-', linewidth=2)
+    axes[0, 0].set_xlabel('Epoch')
+    axes[0, 0].set_ylabel('Accuracy')
+    axes[0, 0].set_title('Accuracy over Epochs')
+    axes[0, 0].grid(True)
+    axes[0, 0].set_ylim([0, 1])
+    
+    # Precision, Recall, F1
+    axes[0, 1].plot(epochs, precisions, 'g-', label='Precision', linewidth=2)
+    axes[0, 1].plot(epochs, recalls, 'r-', label='Recall', linewidth=2)
+    axes[0, 1].plot(epochs, f1s, 'm-', label='F1 Score', linewidth=2)
+    axes[0, 1].set_xlabel('Epoch')
+    axes[0, 1].set_ylabel('Score')
+    axes[0, 1].set_title('Precision/Recall/F1 over Epochs')
+    axes[0, 1].legend()
+    axes[0, 1].grid(True)
+    axes[0, 1].set_ylim([0, 1])
+    
+    # Loss
+    if losses:
+        axes[1, 0].plot(range(1, len(losses)+1), losses, 'orange', linewidth=2)
+        axes[1, 0].set_xlabel('Epoch')
+        axes[1, 0].set_ylabel('Loss')
+        axes[1, 0].set_title('Training Loss over Epochs')
+        axes[1, 0].grid(True)
+    else:
+        axes[1, 0].text(0.5, 0.5, 'Loss data not available', 
+                        ha='center', va='center', transform=axes[1, 0].transAxes)
+        axes[1, 0].set_title('Training Loss (unavailable)')
+    
+    # Summary statistics
+    summary_text = f"""Final Metrics:
+    Accuracy:  {accuracies[-1]:.4f}
+    Precision: {precisions[-1]:.4f}
+    Recall:    {recalls[-1]:.4f}
+    F1 Score:  {f1s[-1]:.4f}
+
+Best Metrics:
+    Max Accuracy:  {max(accuracies):.4f} (Epoch {accuracies.index(max(accuracies))+1})
+    Max F1:        {max(f1s):.4f} (Epoch {f1s.index(max(f1s))+1})"""
+    
+    axes[1, 1].text(0.1, 0.5, summary_text, fontsize=11, 
+                    verticalalignment='center', family='monospace')
+    axes[1, 1].axis('off')
+    
+    plt.tight_layout()
+    plt.savefig('raybnn_training.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print('RayBNN training plot saved to: raybnn_training.png')
 
 def main():
     transform = transforms.Compose([transforms.ToTensor(),
@@ -186,7 +313,8 @@ def main():
              
                 
     outputs = outputs.cpu().numpy()
-
+    plot_kfold_summary(fold_accuracies, fold_precisions, fold_recalls,
+fold_f1_scores)
     return val_features, val_labels, train_features, train_labels
 
 def train_raybnn(x_train, y_train, x_test, y_test):
@@ -194,6 +322,7 @@ def train_raybnn(x_train, y_train, x_test, y_test):
     precision_values=[]
     recall_values = []
     f1_values=[]
+    loss_values = []
     if isinstance(x_train, torch.Tensor):
         Rey_train = x_train.cpu().numpy()
 
@@ -319,6 +448,10 @@ def train_raybnn(x_train, y_train, x_test, y_test):
             arch_search
         )
 
+        # ADD: Extract training loss if available
+        if "training_loss" in arch_search:
+            loss_values.append(arch_search["training_loss"])
+        
         test_x = np.zeros((input_size, batch_size, traj_size, testing_samples)).astype(np.float32)
 
         for i in range(x_test.shape[0]):
@@ -342,27 +475,95 @@ def train_raybnn(x_train, y_train, x_test, y_test):
             k = int(i / batch_size)
 
             sample = output_y[:, j, 0, k]
-            print(sample)
+            #print(sample)
 
             pred.append(np.argmax(sample))
 
         pred = [np.argmax(output_y[:, i % batch_size, 0, int(i/batch_size)]) for i in range(x_test.shape[0])]
+        
         acc = accuracy_score(y_test, pred)
-
         ret = precision_recall_fscore_support(y_test, pred, average='macro')
-
-        print(acc)
-        print(ret)
 
         accuracy_values.append(acc)
         precision_values.append(ret[0])
         recall_values.append(ret[1])
         f1_values.append(ret[2])
 
-    print(output_y.shape)
+        # Print progress every 10 epochs
+        if (epoch + 1) % 10 == 0:
+            print(f'RayBNN Epoch [{epoch+1}/{total_epochs}], '
+                  f'Accuracy: {acc:.4f}, Precision: {ret[0]:.4f}, '
+                  f'Recall: {ret[1]:.4f}, F1: {ret[2]:.4f}')
+
+    # ADD: Plot RayBNN training metrics
+    plot_raybnn_training(accuracy_values, precision_values, recall_values, 
+                         f1_values, loss_values, fold=None)
+
     return output_y.reshape(-1)
 
-
+# ADD: New plotting function for RayBNN
+def plot_raybnn_training(accuracies, precisions, recalls, f1s, losses, fold=None):
+    """Plot RayBNN training metrics over epochs."""
+    epochs = range(1, len(accuracies) + 1)
+    
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    fig.suptitle(f'RayBNN Training Metrics{"" if fold is None else f" - Fold {fold}"}', 
+                 fontsize=16)
+    
+    # Accuracy
+    axes[0, 0].plot(epochs, accuracies, 'b-', linewidth=2)
+    axes[0, 0].set_xlabel('Epoch')
+    axes[0, 0].set_ylabel('Accuracy')
+    axes[0, 0].set_title('Accuracy over Epochs')
+    axes[0, 0].grid(True)
+    axes[0, 0].set_ylim([0, 1])
+    
+    # Precision, Recall, F1
+    axes[0, 1].plot(epochs, precisions, 'g-', label='Precision', linewidth=2)
+    axes[0, 1].plot(epochs, recalls, 'r-', label='Recall', linewidth=2)
+    axes[0, 1].plot(epochs, f1s, 'm-', label='F1 Score', linewidth=2)
+    axes[0, 1].set_xlabel('Epoch')
+    axes[0, 1].set_ylabel('Score')
+    axes[0, 1].set_title('Precision/Recall/F1 over Epochs')
+    axes[0, 1].legend()
+    axes[0, 1].grid(True)
+    axes[0, 1].set_ylim([0, 1])
+    
+    # Loss (if available)
+    if losses:
+        axes[1, 0].plot(epochs, losses, 'orange', linewidth=2)
+        axes[1, 0].set_xlabel('Epoch')
+        axes[1, 0].set_ylabel('Loss')
+        axes[1, 0].set_title('Training Loss over Epochs')
+        axes[1, 0].grid(True)
+    else:
+        axes[1, 0].text(0.5, 0.5, 'Loss data not available', 
+                        ha='center', va='center', transform=axes[1, 0].transAxes)
+        axes[1, 0].set_title('Training Loss (unavailable)')
+    
+    # Summary statistics
+    summary_text = f"""Final Metrics:
+    Accuracy:  {accuracies[-1]:.4f}
+    Precision: {precisions[-1]:.4f}
+    Recall:    {recalls[-1]:.4f}
+    F1 Score:  {f1s[-1]:.4f}
+    
+    Best Metrics:
+    Max Accuracy:  {max(accuracies):.4f} (Epoch {accuracies.index(max(accuracies))+1})
+    Max Precision: {max(precisions):.4f} (Epoch {precisions.index(max(precisions))+1})
+    Max Recall:    {max(recalls):.4f} (Epoch {recalls.index(max(recalls))+1})
+    Max F1:        {max(f1s):.4f} (Epoch {f1s.index(max(f1s))+1})
+    """
+    axes[1, 1].text(0.1, 0.5, summary_text, fontsize=10, 
+                    verticalalignment='center', family='monospace')
+    axes[1, 1].axis('off')
+    
+    plt.tight_layout()
+    
+    fold_suffix = "" if fold is None else f"_fold{fold}"
+    plt.savefig(f'run_network_CNN-RayBNN{fold_suffix}.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f'run_network_CNN-RayBNN training plot saved to: run_network_CNN-RayBNN{fold_suffix}.png')
 
 
 if __name__ == '__main__':

@@ -138,12 +138,11 @@ pub fn find_path_backward_group2(
 
     /// define number of batch size in COO matrix
     let COO_batch_size = 1 + ((COO_find_limit/WRowIdxCOO.dims()[0]) as u64);
-
-    println!("COO batch processing size: {:?}",COO_batch_size);
-
+    
+    
     /// Get current selection of neurons (output)
     let active_size = neuron_idx.dims()[0];
-    println!("|path_f32| Total active neurons: {:?} \n", active_size);
+    
     let mut newidxsel = arrayfire::rows(neuron_idx, (active_size-output_size) as i64, (active_size-1)   as i64);
     
     let mut idxsel = newidxsel.clone();
@@ -152,7 +151,11 @@ pub fn find_path_backward_group2(
 
     /// = traj_size -1 = 1-1=0
     let mut yslicidx: i64 = (Yslices-1) as i64;
-    println!("|path_f32| Current trajectory time step: {:?} \n", yslicidx); 
+    #[cfg(feature = "debug-output")] {
+    println!("COO batch processing size: {:?}",COO_batch_size);
+    println!("|path_f32| Total active neurons: {:?} \n", active_size);
+    println!("|path_f32| Current trajectory time step: {:?} \n", yslicidx);
+    } 
     /// currently = 0
 
     /// These are the array to store indexing values of weight, dX and update parameters
@@ -198,12 +201,13 @@ pub fn find_path_backward_group2(
 
     /// Main loop loop over traj_steps in reverse order
     for i in (0i64..(Xslices as i64)).rev() {
-        println!(" Start main loop\n");
+        //println!(" Start main loop\n");
         println!("|path_f32| Processing timestep: {:?} \n", i);
 
         idxsel = newidxsel.clone(); // = 3
         idxsel_out.insert(i, idxsel.clone());
         //af_print!("|path_f32| Target output neurons indices:", idxsel);
+        #[cfg(feature = "debug-output")]
         println!("idxsel shape: {:?}", idxsel.dims());
 
         // println!("\n|path_f32| The offset value: \n");
@@ -236,6 +240,7 @@ pub fn find_path_backward_group2(
         Didxsel_out.insert(i, Didxsel.clone());
         Eidxsel_out.insert(i, Eidxsel.clone());
 
+        #[cfg(feature = "debug-output")]{
         println!("\n|path_f32| The index map \n");
         println!("[PARAMS] Parameter index mappings of H: {:?} \n", Hidxsel_out);
         println!("[PARAMS] Parameter index mappings of A: {:?} \n", Aidxsel_out);
@@ -246,32 +251,34 @@ pub fn find_path_backward_group2(
 
 
         
-        println!("\n ------------------- \n");
+        //println!("\n ------------------- \n");
+        }
         /// = 3 (output_size)
         let dAsize = idxsel.dims()[0];
 
         let dAstart = 0;
         /// 0 --> 2
         let dAend = dAstart + dAsize - 1;
-        println!("[DERIVATIVES] Gradient parameter dA boundaries index: {:?} -> {:?} \n", dAstart, dAend);
-
 
         let dBstart = dAend + 1;
         let dBend = dBstart + dAsize - 1;
-        println!("[DERIVATIVES] Gradient parameter dB boundaries index: {:?} -> {:?} \n", dBstart, dBend);
         let dCstart = dBend + 1;
         let dCend = dCstart + dAsize - 1;
 
-        println!("[DERIVATIVES] Gradient parameter dC boundaries index: {:?} -> {:?} \n", dCstart, dCend);
         let dDstart = dCend + 1;
         let dDend = dDstart + dAsize - 1;
 
-        println!("[DERIVATIVES] Gradient parameter dD boundaries index: {:?} -> {:?} \n", dDstart, dDend);
         // 12 -->14
         let dEstart = dDend + 1;
         let dEend = dEstart + dAsize - 1;
+        #[cfg(feature = "debug-output")]
+        {
+        println!("[DERIVATIVES] Gradient parameter dA boundaries index: {:?} -> {:?} \n", dAstart, dAend);
+        println!("[DERIVATIVES] Gradient parameter dB boundaries index: {:?} -> {:?} \n", dBstart, dBend);
+        println!("[DERIVATIVES] Gradient parameter dC boundaries index: {:?} -> {:?} \n", dCstart, dCend);
+        println!("[DERIVATIVES] Gradient parameter dD boundaries index: {:?} -> {:?} \n", dDstart, dDend);
         println!("[DERIVATIVES] Gradient parameter dE boundaries index: {:?} -> {:?} \n", dEstart, dEend);
-
+        }
         // initialize HashMap of: sequences that contain dA/dB/dC/dD/dE of all output neurons
         // w.r.t key i 
         dAseqs_out.insert(i,[arrayfire::Seq::new(dAstart as i32, dAend as i32, 1i32), arrayfire::Seq::default() ] );
@@ -279,7 +286,7 @@ pub fn find_path_backward_group2(
         dCseqs_out.insert(i,[arrayfire::Seq::new(dCstart as i32, dCend as i32, 1i32), arrayfire::Seq::default() ] );
         dDseqs_out.insert(i,[arrayfire::Seq::new(dDstart as i32, dDend as i32, 1i32), arrayfire::Seq::default() ] );
         dEseqs_out.insert(i,[arrayfire::Seq::new(dEstart as i32, dEend as i32, 1i32), arrayfire::Seq::default() ] );
-        println!("\n ------------------- \n");
+        //println!("\n ------------------- \n");
         // println!("[DERIVATIVES] Gradient dA sequence mappings: {:?}",dAseqs_out);
         // println!("[DERIVATIVES] Gradient dB sequence mappings: {:?}",dBseqs_out);
         // println!("[DERIVATIVES] Gradient dC sequence mappings: {:?}",dCseqs_out);
@@ -297,6 +304,8 @@ pub fn find_path_backward_group2(
         arrayfire::assign_seq(&mut combidxsel, &[arrayfire::Seq::new(dEstart as i32, dEend as i32, 1i32)], &Eidxsel);
 
         combidxsel_out.insert(i, combidxsel.clone());
+        #[cfg(feature = "debug-output")]
+
         println!("[PARAMS] Combined parameter indices for all activation function parameters: {:?}", combidxsel_out);
 
 
@@ -337,6 +346,8 @@ pub fn find_path_backward_group2(
         dXsel = remap_rows(&rvec, &idxsel, neuron_size);
         //af_print!("|GRADIENTS| Input gradient index: ", dXsel);
         dXsel_out.insert(i, dXsel);
+        #[cfg(feature = "debug-output")]
+
         println!("|GRADIENTS| Input gradient index mappings: {:?} \n", dXsel_out);
 
         // This converts 2D matrix coo(row,col) into 1D global indices
@@ -346,6 +357,8 @@ pub fn find_path_backward_group2(
             &rvec,
             &cvec,
         );
+        #[cfg(feature = "debug-output")]
+
         println!("|SPARSE| Global weight indices for matrix operations: {:?} \n", gidx1);
 
         // Sort array
@@ -394,6 +407,8 @@ pub fn find_path_backward_group2(
 
 
         nrows_out.insert(i, sumarr.dims()[0].clone());
+        #[cfg(feature = "debug-output")]
+
         println!("nrows_out: {:?} \n", nrows_out);
         sparserow = arrayfire::accum(&sumarr, 0);
 
@@ -407,11 +422,12 @@ pub fn find_path_backward_group2(
         sparseval_out.insert(i, sparseval.clone());
         sparserow_out.insert(i, sparserow.clone());
         sparsecol_out.insert(i, sparsecol.clone());
-
+        #[cfg(feature = "debug-output")]
+{
         println!("[CSR] The HashMap of weight value: {:?} \n", sparseval_out);
         println!("[CSR] The HashMap of row indices value: {:?} \n", sparserow_out);
         println!("[CSR] The HashMap of col indices value: {:?} \n", sparsecol_out);
-
+}
         /* 
         Network Structure:
 Input: [0, 1, 2, 3]

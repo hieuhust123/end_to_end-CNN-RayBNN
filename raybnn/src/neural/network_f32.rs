@@ -2,6 +2,7 @@ extern crate arrayfire;
 use arrayfire::af_print;
 use std::collections::HashMap;
 use nohash_hasher;
+use arrayfire::Seq;
 
 use crate::neural::activation_f32::UAF;
 use crate::neural::activation_f32::deriUAF;
@@ -486,7 +487,8 @@ pub fn state_space_forward_batch(
     Z: &mut arrayfire::Array<f32>,
     Q: &mut arrayfire::Array<f32>
 ) {
-    //println!("START forward pass! ");
+    println!("START forward pass! ");
+    
     let neuron_size: u64 = netdata.neuron_size.clone();
     //let proc_num: u64 = netdata.proc_num.clone();
     let input_size: u64 = netdata.input_size.clone();
@@ -503,10 +505,9 @@ pub fn state_space_forward_batch(
     //af_print!("tempx: ", tempx);
     let seqs = &[arrayfire::Seq::new(0.0f32, (input_size-1) as f32, 1.0f32),  arrayfire::Seq::default()];
     //println!("seqs: {:?} \n", seqs);
-
-    println!("\n=== RAYBNN FORWARD PASS STRUCTURE ===");
-
+    
     // Before the loop
+    //#[cfg(feature = "debug-output")]
     println!("S initial shape: {:?}", S.dims());
 
 
@@ -526,7 +527,7 @@ pub fn state_space_forward_batch(
     // println!("WValues.dims(): {:?}", WValues.dims());
     // println!("WRowIdxCSR.dims(): {:?}", WRowIdxCSR.dims());
     // println!("WColIdx.dims(): {:?}", WColIdx.dims());
-    // println!("neuron_size: {}", neuron_size);
+    println!("neuron_size: {}", neuron_size);
 
 // Check if dimensions match
 if WValues.dims()[0] != WColIdx.dims()[0] {
@@ -544,24 +545,34 @@ if WValues.dims()[0] != WColIdx.dims()[0] {
     );
     //println!("W: {:?} \n",W);
     //af_print!("W: ", W);
+    //Print only first few elements of ArrayFire array
+    let sample_Z = arrayfire::index(&Z, &[Seq::new(0.0, 19.0, 1.0), 
+    Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
+    let sample_Q = arrayfire::index(&Q, &[Seq::new(0.0, 19.0, 1.0), 
+    Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
+    af_print!("Z value BEFORE being assigned S in FWP:",sample_Z);
+    af_print!("Q value BEFORE being assigned S in FWP:",sample_Q);
     for i in 0i64..Zslices
     {   
 
         if i == 0 {
-            println!("\n=== Time step 0: Verifying input placement ===");
+            println!("\n--- Time step 0: Verifying input placement ---");
             
             // Check which rows of S contain the external input
             let input_rows = arrayfire::rows(&S, 0, (input_size-1) as i64);
-            
+            #[cfg(feature = "debug-output")]
+            {
             println!("S shape: {:?}", S.dims());
             println!("Input rows shape: {:?}", input_rows.dims());
             println!("X shape: {:?}", X.dims());
-            
+            }
             // Check dimensions match
             if input_rows.dims()[0] == X.dims()[0] {
-                println!("✓ Input dimensions match");
+                #[cfg(feature = "debug-output")]
+                println!("Input dimensions MATCH!");
             } else {
-                println!("✗ WARNING: Dimension mismatch!");
+                #[cfg(feature = "debug-output")]
+                println!("WARNING: Dimension MISMATCH!");
             }
         }
 
@@ -579,7 +590,8 @@ if WValues.dims()[0] != WColIdx.dims()[0] {
             //af_print!("S: ", S);
         }
         
-
+        // println!("S shape later: {:?}", S);
+        // println!("W shape later: {:?}", W);
         S = arrayfire::matmul(&W, &S, arrayfire::MatProp::NONE, arrayfire::MatProp::NONE);
         S = arrayfire::add(&S, &H, true);
         arrayfire::set_slice(Z, &S, i);
@@ -587,8 +599,14 @@ if WValues.dims()[0] != WColIdx.dims()[0] {
         S = UAF(&S,&A,&B,&C,&D,&E);
         arrayfire::set_slice(Q, &S, i);
     }
-
-    println!("FINISH forward pass! \n");
+    // Print samples
+    let sample_Z_after = arrayfire::index(&Z, &[Seq::new(0.0, 19.0, 1.0), 
+    Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
+    let sample_Q_after = arrayfire::index(&Q, &[Seq::new(0.0, 19.0, 1.0), 
+    Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
+    af_print!("Z value AFTER being assigned S in FWP:",sample_Z_after);
+    af_print!("Q value AFTER being assigned S in FWP:",sample_Q_after);
+    println!("FINISH FORWARD PASS! \n");
     
 }
 
@@ -700,11 +718,9 @@ pub fn state_space_backward_group2(
     let output_size: u64 = netdata.output_size.clone();
     let proc_num: u64 = netdata.proc_num.clone();
 
-    println!("---- Start the backward pass ---- \n");
+    println!("===== START THE BACKWARD PASS ===== \n");
 
     let batch_size: u64 = netdata.batch_size.clone();
-
-
 
     //Set output to zero
     *grad = arrayfire::constant::<f32>(0.0,network_params.dims());
@@ -712,20 +728,12 @@ pub fn state_space_backward_group2(
     *grad_input = arrayfire::constant::<f32>(0.0, X.dims());
     *grad_input2 = arrayfire::constant::<f32>(0.0, X.dims());
 
-
-
-
-
-
     //Get current selection of neurons
 
     let active_size = neuron_idx.dims()[0];
-    println!("\n=== NEURON INDEX VERIFICATION ===");
+    println!("\n--- NEURON INDEX VERIFICATION ---");
     println!("Total active neurons: {}", active_size);
-    println!("Input size: {}", input_size);
     let idxsel = arrayfire::rows(neuron_idx, (active_size-output_size) as i64, (active_size-1)   as i64);
-
-
 
 
     let Qslices: u64 = Q.dims()[2];
@@ -759,9 +767,6 @@ pub fn state_space_backward_group2(
 
     /// X[input_size,batch_size,traj_steps]
     let X_slices: i64 = X.dims()[2] as i64;
-
-    
-
 
 
     let mut inx = arrayfire::constant::<f32>(0.0,S_dims);
@@ -852,13 +857,19 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
 
     //Main loop
     for i in (0i64..Zslices).rev() {
-        println!(" Start main loop\n");
+        //println!(" Start main loop\n");
         println!("|network_f32| Timestep: {:?} \n", i);
 
         println!("Number of current active neurons: {:?}",active_size);
         // af_print!("Index of output neurons:", idxsel);
 
-        // af_print!("Z value: ",Z);
+        // Print samples
+    let backward_sample_Z_before = arrayfire::index(&Z, &[Seq::new(0.0, 19.0, 1.0), 
+    Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
+    let backward_sample_Q_before = arrayfire::index(&Q, &[Seq::new(0.0, 19.0, 1.0), 
+    Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
+        af_print!("[BACKWARD PASS] Z value BEFORE backward pass: ",backward_sample_Z_before);
+        af_print!("[BACKWARD PASS] Q value BEFORE backward pass: ",backward_sample_Q_before);
         //Select X value
         let mut idxrs = arrayfire::Indexer::default();
         sliceseq = arrayfire::Seq::new(i as f32, i as f32, 1.0);
@@ -880,11 +891,6 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         sD = arrayfire::lookup(&network_params, &Didxsel_out[&i], 0);
 
         sE = arrayfire::lookup(&network_params, &Eidxsel_out[&i], 0);
-
-
-
-
-
 
 
         // af_print!("Value of dX before element wise product 1: ", dX);
@@ -914,9 +920,12 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         
         // af_print!("Value of dX before element wise product 2: ", dX);
         let dUAF = dX.clone();
-        println!("dUAF/dZ shape: {:?}", dUAF.dims());
         let dJ = error.clone();
+        #[cfg(feature = "debug-output")]
+        {
+        println!("dUAF/dZ shape: {:?}", dUAF.dims());
         println!("dJ/dUAF: {:?}", dJ.dims());
+        }
         // af_print!("Value of error: ", error);
         // af_print!("Total error grads for output neurons: ", total_error);
 
@@ -992,14 +1001,6 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         // af_print!(" Updated ∂UAF",grad);
 
 
-
-
-
-
-
-
-
-
         //Get dX of each row
         let mut idxrs = arrayfire::Indexer::default();
         idxrs.set_index(&dXsel_out[&i], 0, None); // extract number of rows. Eg: dXsel=[2,5,6]
@@ -1007,10 +1008,6 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         tempdX = arrayfire::index_gen(&dX, idxrs);
         
         //af_print!("Temporary dX need for calculating gW:",tempdX);
-
-
-
-
 
 
 
@@ -1054,12 +1051,12 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
             // af_print!("Assigned Input values: ",inx);
         }
         else
-        {   
+        {   #[cfg(feature = "debug-output")]
             println!("----- traj_steps<1 --> Trigger condition 3 ---- \n");
             arrayfire::assign_seq(&mut inx, seqs, &X);
             //af_print!("Assigned Input values: ",inx);
         }
-
+    
         //Update gW
         let mut idxrs = arrayfire::Indexer::default();
         idxrs.set_index(&cvec_out[&i], 0, None);
@@ -1087,9 +1084,6 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         drop(tempgW);
 
         // af_print!("Updated gW to gradient array: ",grad);
-
-        
-
 
         //Propagate Errors
         tempW = arrayfire::lookup(network_params, &sparseval_out[&i], 0);
@@ -1141,76 +1135,41 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
         );
         drop(tempW);
         // af_print!("Error = W . dX: ",error);
-  // Debug: Print dimensions BEFORE checking condition
-println!("=== Time step {} ===", i);
-println!("error.dims()[0] = {}", error.dims()[0]);
-println!("input_size = {}", input_size);
-println!("nrows_out[&i] = {}", nrows_out[&i]);
-println!("dX.dims()[0] = {}", dX.dims()[0]);
-println!("Condition check: {} >= {}? {}", error.dims()[0], input_size, error.dims()[0] >= input_size);
-
-// Extract input gradients if available
-if error.dims()[0] >= input_size {
-    let input_grad_at_t = arrayfire::rows(&error, 0, (input_size-1) as i64);
-    
-    println!("condition 1 NOTICE dJ/dX: {:?}", input_grad_at_t);
-    if X_slices > 1 {
-        if i < X_slices as i64 {
-            // ACCUMULATE: Get existing gradient and add new contribution
-            let existing = arrayfire::slice(grad_input, i);
-            let updated = existing + input_grad_at_t.clone();  // ← KEY: Addition!
-            arrayfire::set_slice(grad_input, &updated, i);
-        }
-        else {
-            println!("WARNING: timestep {} >= X_slices {}, skipping", i, X_slices);
-        }
-    } 
-    else {
-        *grad_input = grad_input.clone() + input_grad_at_t.clone();
-        println!("condition 3 NOTICE dJ/dX: {:?}", grad_input);
-    }
-    //af_print!("dJ/dX: ", grad_input); 
-    drop(input_grad_at_t);
-} else {
-    println!("SKIPPED: error array has only {} rows, need at least {}", error.dims()[0], input_size);
-}
-
-// Count how many time steps actually extract gradients
-let mut extracted_count = 0;
-let mut skipped_count = 0;
-
-if error.dims()[0] >= input_size {
-    extracted_count += 1;
-} else {
-    skipped_count += 1;
-    println!("SKIPPED at time step {}: error has {} rows, need {}", 
-             i, error.dims()[0], input_size);
-}
-
-// After loop ends, print summary
-println!("Gradient extraction: {} extracted, {} skipped", extracted_count, skipped_count);
-        // let input_grad_at_t = arrayfire::rows(&error, 0, (input_size-1) as i64);
-        // println!("NOTICE dJ/dX: {:?}", input_grad_at_t);
         
-        //Add new Y error
-        if (yslicidx > 0)
-        {
+        // Extract input gradients if available
+        if error.dims()[0] >= input_size {
+            let input_grad_at_t = arrayfire::rows(&error, 0, (input_size-1) as i64);
+            
+            if X_slices > 1 {
+                if i < X_slices as i64 {
+                    // ACCUMULATE: Get existing gradient and add new contribution
+                    let existing = arrayfire::slice(grad_input, i);
+                    let updated = existing + input_grad_at_t.clone();
+                    arrayfire::set_slice(grad_input, &updated, i);
+                }
+            } else {
+                *grad_input = grad_input.clone() + input_grad_at_t.clone();
+            }
+            drop(input_grad_at_t);
+        }
+        
+        // Add new Y error
+        if yslicidx > 0 {
             yslicidx = yslicidx - 1;
             derror = arrayfire::slice(&total_error,  yslicidx);
-            //af_print!("derror: ",derror);
-
             error = arrayfire::join(0, &error, &derror);
-            //af_print!("Combined error: ",error);
         }
 
+        // Print samples
+        let backward_sample_Z_after = arrayfire::index(&Z, &[Seq::new(0.0, 19.0, 1.0), 
+            Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
+        let backward_sample_Q_after = arrayfire::index(&Q, &[Seq::new(0.0, 19.0, 1.0), 
+            Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
+        af_print!("[BACKWARD PASS] Z value AFTER backward pass: ",backward_sample_Z_after);
+        af_print!("[BACKWARD PASS] Q value AFTER backward pass: ",backward_sample_Q_after);
+    }
 
-
-}
-
-
-
-println!("FINISH backward pass! \n");
-
+    println!("FINISH backward pass! \n");
 }
 
 

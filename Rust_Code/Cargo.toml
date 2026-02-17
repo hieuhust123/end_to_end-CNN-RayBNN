@@ -2,7 +2,7 @@
 name = "raybnn_python"
 version = "0.1.3"
 authors = [""]
-edition = "2024"
+edition = "2021"
 
 [lib]
 name = "raybnn_python"
@@ -25,3 +25,6 @@ nohash-hasher = "0.2.0"
 serde = { version = "1.0.228", features = ["derive"]}
 
 [workspace]
+
+[features]
+debug-output = []

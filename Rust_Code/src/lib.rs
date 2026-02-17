@@ -563,12 +563,13 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 
 
 
-		let train_x_dims = train_x.shape().to_vec();
-		println!("[TRAIN_NETWORK_lib.rs] Input train X dims: {:?}", train_x_dims);
-		let train_y_dims = train_y.shape().to_vec();
+		let train_x_dims = train_x.shape().clone().to_vec();
+		//#[cfg(feature = "debug-output")]
+		
+		let train_y_dims = train_y.shape().clone().to_vec();
 
-		let crossval_x_dims = crossval_x.shape().to_vec();
-		let crossval_y_dims = crossval_y.shape().to_vec();
+		let crossval_x_dims = crossval_x.shape().clone().to_vec();
+		let crossval_y_dims = crossval_y.shape().clone().to_vec();
 
 		let mut traindata_X: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
 		let mut traindata_Y: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
@@ -578,9 +579,11 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 
 
 		let train_x = train_x.to_owned_array();
+		println!("[TRAIN_NETWORK_lib.rs] Input train X dims: {:?}", train_x_dims);
+		//println!("[TRAIN_NETWORK_lib.rs] Input train X dims: {:?}", train_x.shape());
 		// Print only shape and first few elements
 		let sample_data: Vec<f32> = train_x.clone().into_iter().take(50).collect();
-		//println!("[TRAIN_NETWORK_lib.rs] Input train X first 50 elements in Rust ndarray: {:?}", sample_data);
+		println!("[TRAIN_NETWORK_lib.rs] Input train X first 50 elements in Rust ndarray: {:?}", sample_data);
 		
 		let train_y = train_y.to_owned_array() ;
 
@@ -595,8 +598,8 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 		{
 
 
-			let train_x_dims = train_x.shape().to_vec();
-			let train_y_dims = train_y.shape().to_vec();
+			let train_x_dims = train_x.shape().clone().to_vec();
+			let train_y_dims = train_y.shape().clone().to_vec();
 
 			let mut X = Vec::new();
 			let mut Y = Vec::new();
@@ -618,19 +621,19 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 			traindata_Y.insert(traj as u64, Y);
 		}
 		// Print HashMap summary instead of full content
-		// println!("[TRAIN_NETWORK_lib.rs] Input train X HashMap size: {}", traindata_X.len());
-		// if let Some(first_traj) = traindata_X.get(&0) {
-		// 	let sample_size = std::cmp::min(10, first_traj.len());
-		// 	println!("[TRAIN_NETWORK_lib.rs] First trajectory (traj=0) first {} elements: {:?}", sample_size, &first_traj[0..sample_size]);
-		// }
-		// if let Some(last_traj) = traindata_X.get(&(traindata_X.len() as u64 - 1)) {
-		// 	let sample_size = std::cmp::min(10, last_traj.len());
-		// 	println!("[TRAIN_NETWORK_lib.rs] Last trajectory (traj={}) first {} elements: {:?}", traindata_X.len()-1, sample_size, &last_traj[0..sample_size]);
-		// }
+		println!("[TRAIN_NETWORK_lib.rs] Input train X HashMap size: {}", traindata_X.len());
+		if let Some(first_traj) = traindata_X.get(&0) {
+			let sample_size = std::cmp::min(10, first_traj.len());
+			println!("[TRAIN_NETWORK_lib.rs] First trajectory (traj=0) first {} elements: {:?}", sample_size, &first_traj[0..sample_size]);
+		}
+		if let Some(last_traj) = traindata_X.get(&(traindata_X.len() as u64 - 1)) {
+			let sample_size = std::cmp::min(10, last_traj.len());
+			println!("[TRAIN_NETWORK_lib.rs] Last trajectory (traj={}) first {} elements: {:?}", traindata_X.len()-1, sample_size, &last_traj[0..sample_size]);
+		}
 		for traj in 0..crossval_x_dims[3]
 		{
-			let crossval_x_dims = crossval_x.shape().to_vec();
-			let crossval_y_dims = crossval_y.shape().to_vec();
+			let crossval_x_dims = crossval_x.shape().clone().to_vec();
+			let crossval_y_dims = crossval_y.shape().clone().to_vec();
 
 			let mut X = Vec::new();
 			let mut Y = Vec::new();
@@ -651,7 +654,7 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 		}
 
 		// // ADD THESE PRINT STATEMENTS TO SHOW FINAL PROCESSED DATA:
-		// println!("traindata_X HashMap created with {} trajectories", traindata_X.len());
+		println!("traindata_X HashMap created with {} trajectories", traindata_X.len());
 		// println!("First trajectory data length: {:?}", traindata_X.get(&0).map(|v| v.len()));
 		
 		// // Show sample of first trajectory data (first 10 elements)
@@ -753,20 +756,15 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 
 
 
-
-
-
-
-	#[pyfn(m)]
-	#[pyo3(signature = (test_x, model, test_y = None, loss_function = None))]
-    fn test_network<'py>(
+#[pyfn(m)]
+fn test_network<'py>(
         py: Python<'py>,
 
 		test_x: PyReadonlyArray4<'py, f32>,
-		model: Py<PyAny>,
-		test_y: Option<PyReadonlyArray4<'py, f32>>,
-		loss_function: Option<String>
-    ) -> PyResult<Py<PyAny>>   {
+
+
+		model: Py<PyAny>
+    ) -> &'py PyArray4<f32>   {
 
 
 
@@ -776,11 +774,10 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
 
 
-		let test_x_dims = test_x.shape().to_vec();
+		let test_x_dims = test_x.shape().clone().to_vec();
 
 
 		let mut validationdata_X: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
-		let mut validationdata_Y: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
 
 
 		let test_x = test_x.to_owned_array() ;
@@ -788,10 +785,10 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 
 		let Xslices = test_x_dims[2];
 
-		// Process test_x
+		
 		for traj in 0..test_x_dims[3]
 		{
-			let test_x_dims = test_x.shape().to_vec();
+			let test_x_dims = test_x.shape().clone().to_vec();
 
 			let mut X = Vec::new();
 
@@ -809,65 +806,17 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 			
 		}
 
-		// Process test_y if provided
-		if let Some(ref test_y_ref) = test_y {
-			let test_y = test_y_ref.to_owned_array();
-			let test_y_dims = test_y.shape().to_vec();
-			
-			for traj in 0..test_y_dims[3]
-			{
-				let test_y_dims = test_y.shape().to_vec();
-				let mut Y = Vec::new();
-
-				if Xslices > 1
-				{
-					Y = test_y.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_y_dims[0],test_y_dims[2],test_y_dims[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
-				}
-				else 
-				{
-					Y = test_y.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_y_dims[1],test_y_dims[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
-				}
-
-				validationdata_Y.insert(traj as u64, Y);
-			}
-		}
-
 		
 		let mut Yhat_out = nohash_hasher::IntMap::default();
-		let mut eval_metric_out = Vec::new();
+		
 
-		// Determine which loss function to use (if provided)
-		// If test_y is None, we pass an empty map and a dummy function (which won't be called)
-		let eval_metric_fn: fn(&arrayfire::Array<f32>, &arrayfire::Array<f32>) -> f32 = if let Some(loss_func) = loss_function.as_ref() {
-			// Validate that test_y is provided when loss_function is specified
-			if test_y.is_none() {
-				return Err(pyo3::exceptions::PyValueError::new_err("test_y must be provided when loss_function is specified"));
-			}
-			
-			// Determine which loss function to use
-			match loss_func.as_str() {
-				"MSE" => raybnn::optimal::loss_f32::MSE,
-				"softmax_cross_entropy" => raybnn::optimal::loss_f32::softmax_cross_entropy,
-				"sigmoid_cross_entropy" => raybnn::optimal::loss_f32::sigmoid_cross_entropy,
-				"sigmoid_cross_entropy_5" => sigmoid_loss,
-				_ => {
-					return Err(pyo3::exceptions::PyValueError::new_err(format!("Unknown loss function: {}", loss_func)));
-				}
-			}
-		} else {
-			// Dummy function that won't be called (validationdata_Y will be empty)
-			raybnn::optimal::loss_f32::MSE
-		};
-
-		// Call test_network - it will handle empty validationdata_Y gracefully
-		// (loss calculation is skipped when validationdata_Y is empty)
+		//Train network, stop at lowest crossval
 		raybnn::interface::autotest_f32::test_network(
-			&validationdata_X,
-			&validationdata_Y, // Empty if test_y was None, populated otherwise
-			eval_metric_fn,
-			&arch_search, 
-			&mut Yhat_out,
-			&mut eval_metric_out
+			&mut validationdata_X,
+
+			&mut arch_search, 
+
+			&mut Yhat_out, 
 		);
 
 		/* 
@@ -912,15 +861,162 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 			arr
 		};
 
-		// Return predictions and optionally loss values
-		if !eval_metric_out.is_empty() {
-			let loss_arr = PyArray1::<f32>::from_vec(py, eval_metric_out);
-			let tuple = pyo3::types::PyTuple::new(py, [arr.to_object(py), loss_arr.to_object(py)]);
-			Ok(tuple.to_object(py))
-		} else {
-			Ok(arr.to_object(py))
-		}
+
+
+		arr
 	}
+
+
+
+	// #[pyfn(m)]
+    // fn test_network<'py>(
+    //     py: Python<'py>,
+
+	// 	test_x: PyReadonlyArray4<'py, f32>,
+	// 	//Added
+	// 	test_y: PyReadonlyArray4<'py, f32>,  
+
+	// 	model: Py<PyAny>
+    // ) 
+	// //-> &'py PyArray4<f32>  
+	// -> PyResult<(Py<PyAny>, f32)> {
+
+
+
+	// 	arrayfire::set_backend(arrayfire::Backend::CUDA);
+	// 	arrayfire::device_gc();
+
+	// 	let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
+
+
+	// 	let test_x_dims = test_x.shape().clone().to_vec();
+	// 	let test_y_dims = test_y.shape().clone().to_vec();
+
+	// 	let mut validationdata_X: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+	// 	//added
+	// 	let mut validationdata_Y: nohash_hasher::IntMap<u64, Vec<f32>> = nohash_hasher::IntMap::default();
+
+	// 	let test_x = test_x.to_owned_array() ;
+	// 	let test_y = test_y.to_owned_array();
+
+	// 	let Xslices = test_x_dims[2];
+
+		
+	// 	for traj in 0..test_x_dims[3]
+	// 	{
+	// 		let test_x_dims = test_x.shape().clone().to_vec();
+
+	// 		let mut X = Vec::new();
+
+	// 		if Xslices > 1
+	// 		{
+	// 			X = test_x.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_x_dims[0],test_x_dims[2],test_x_dims[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+	// 		}
+	// 		else 
+	// 		{
+	// 			X = test_x.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_x_dims[1],test_x_dims[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+	// 		}
+
+
+	// 		validationdata_X.insert(traj as u64, X);
+			
+	// 	}
+	// 	//added
+	// 	for traj in 0..test_y_dims[3]
+	// 	{
+	// 		let test_y_dims = test_y.shape().clone().to_vec();
+
+	// 		let mut Y = Vec::new();
+
+	// 		if Xslices > 1
+	// 		{
+	// 			Y = test_y.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_y_dims[0],test_y_dims[2],test_y_dims[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+	// 		}
+	// 		else 
+	// 		{
+	// 			Y = test_y.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_y_dims[1],test_y_dims[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+	// 		}
+
+
+	// 		validationdata_Y.insert(traj as u64, Y);
+			
+	// 	}
+		
+	// 	let mut Yhat_out = nohash_hasher::IntMap::default();
+	// 	//added
+
+	// 	let mut eval_metric_out = Vec::new(); 
+	// 	//Train network, stop at lowest crossval
+		
+	// 		raybnn::interface::autotest_f32::test_network(
+	// 		&mut validationdata_X,
+	// 		&mut validationdata_Y,
+	// 		sigmoid_loss,
+	// 		&mut arch_search, 
+
+	// 		&mut Yhat_out, 
+	// 		&mut eval_metric_out
+	// 	);
+		
+		
+
+	// 	/* 
+	// 	arrayfire::set_seed(0);
+	// 	let Yhat_dims = arrayfire::Dim4::new(&[2, 3, 5, 7]);
+	// 	let Yhat_arr = arrayfire::randu::<f32>(Yhat_dims);
+
+	// 	arrayfire::print_gen("Yhat_arr".to_string(), &Yhat_arr,Some(6));
+
+	// 	let mut Yhat_vec = vec!(f32::default();Yhat_arr.elements());
+	// 	Yhat_arr.host(&mut Yhat_vec);
+	// 	*/
+	// 	// FIX #3: Compute test loss from eval_metric_out
+	// 	let test_loss: f32 = if eval_metric_out.is_empty() {
+	// 		LARGE_POS_NUM_f32
+	// 	} else {
+	// 		let sum: f32 = eval_metric_out.iter().sum();
+	// 		sum / (eval_metric_out.len() as f32)
+	// 	};
+
+	// 	println!("Test loss: {}", test_loss);
+
+	// 	let arr = unsafe {
+
+	// 		let dim0 = arch_search.neural_network.netdata.output_size as usize;
+	// 		let dim1 = test_x_dims[1] as usize;
+	// 		let dim2 = test_x_dims[2] as usize;
+	// 		let dim3 = test_x_dims[3] as usize;
+
+	// 		let arr = PyArray4::<f32>::new(py, [dim0, dim1, dim2, dim3], true);
+
+
+	// 		for l in 0..dim3
+	// 		{
+	// 			let idx = l as u64;
+	// 			let Yhat_vec = Yhat_out[&idx].clone();
+
+
+	// 			for i in 0..dim0 {
+	// 				for j in 0..dim1 {
+	// 					for k in 0..dim2 {
+	// 						arr.uget_raw([i, j, k, l]).write(Yhat_vec[i + (dim0*j) + (dim0*dim1*k) ]);
+	// 					}
+	// 				}
+	// 			}
+
+	// 		}
+
+			
+
+	// 		arr
+	// 	};
+
+
+
+	// 	// FIX #4: Return tuple of (predictions, test_loss)
+    // 	Ok((arr.to_object(py), test_loss))
+	// }
+
 
 
 
@@ -1084,6 +1180,7 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 		//println!("y_input_ndarray shape: {:?}\n",y_input_ndarray);
 		// Print only shape and first few elements
 		let sample_data: Vec<f32> = y_input_ndarray.clone().into_iter().take(100).collect();
+		#[cfg(feature = "debug-output")]
 		println!("[Forward pass function PyO3] Input train Y first 50 elements in Rust ndarray: {:?}", sample_data);
 
 		let mut train_x_af =  arrayfire::constant::<f32>(0.0,temp_dims);
@@ -1110,34 +1207,14 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 			traindata_x.insert(traj as u64, train_x_rust_vec);
 			traindata_y.insert(traj as u64, train_y_rust_vec);
 		}
-		// println!("traindata_x:");
-		// for (key, value) in traindata_x.iter() {
-		// 	println!("  traj {}: shape {:?}", key, value.len());
-		// }
-
-		// println!("\ntraindata_y:");
-		// for (key, value) in traindata_y.iter() {
-		// 	println!("  traj {}: shape {:?}", key, value.len());
-		// }
-		// // Print HashMap summary instead of full content
-
-		// 	//println!("[Forward pass function PyO3] Input train X HashMap size: {}", traindata_x.len());
-		// if let Some(first_traj) = traindata_y.get(&0) {
-		// 	let sample_size = std::cmp::min(10, first_traj.len());
-		// 	println!("[Forward pass function PyO3] First trajectory (traj=0) first {} elements: {:?}", sample_size, &first_traj[0..sample_size]);
-		// }
-		// if let Some(last_traj) = traindata_y.get(&(traindata_y.len() as u64 - 1)) {
-		// 	let sample_size = std::cmp::min(10, last_traj.len());
-		// 	println!("[Forward pass function PyO3] Last trajectory (traj={}) first {} elements: {:?}", traindata_y.len()-1, sample_size, &last_traj[0..sample_size]);
-		// }
-		// now we have traindata_x same as train_network() func
-
 		
 		let mut batch_idx = 0;
 		let epoch_num = traindata_x.len() as u64;
 		train_x_af = arrayfire::Array::new(&traindata_x[&batch_idx], train_x_dims);
 		train_y_af = arrayfire::Array::new(&traindata_y[&batch_idx], train_y_dims);
+		#[cfg(feature = "debug-output")]
 		println!("[Forward pass function PyO3] Input arrayfire training shape: {:?}", train_x_af.dims());
+		#[cfg(feature = "debug-output")]
 		println!("[Forward pass function PyO3] Output arrayfire training shape: {:?}", train_y_af.dims());
 		// Print only first few elements of ArrayFire array
 		//let sample_elements = arrayfire::index(&train_x_af, &[Seq::new(0.0, 9.0, 1.0), Seq::default(), Seq::default(), Seq::default()]);
@@ -1285,6 +1362,7 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 		//println!("y_input_ndarray shape: {:?}\n",y_input_ndarray);
 		// Print only shape and first few elements
 		let sample_data: Vec<f32> = y_input_ndarray.clone().into_iter().take(100).collect();
+		#[cfg(feature = "debug-output")]
 		println!("[Forward pass function PyO3] Input train Y first 50 elements in Rust ndarray: {:?}", sample_data);
 
 		let mut train_x_af =  arrayfire::constant::<f32>(0.0,temp_dims);
@@ -1318,7 +1396,9 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 		let epoch_num = traindata_x.len() as u64;
 		train_x_af = arrayfire::Array::new(&traindata_x[&batch_idx], train_x_dims);
 		train_y_af = arrayfire::Array::new(&traindata_y[&batch_idx], train_y_dims);
+		#[cfg(feature = "debug-output")]
 		println!("[Forward pass function PyO3] Input arrayfire training shape: {:?}", train_x_af.dims());
+		#[cfg(feature = "debug-output")]
 		println!("[Forward pass function PyO3] Output arrayfire training shape: {:?}", train_y_af.dims());
 		// Print only first few elements of ArrayFire array
 		//let sample_elements = arrayfire::index(&train_x_af, &[Seq::new(0.0, 9.0, 1.0), Seq::default(), Seq::default(), Seq::default()]);
@@ -1391,7 +1471,7 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 		alpha0: f32,
 		model: Py<PyAny>,
 		i: u64,
-	) -> PyResult<(Py<PyAny>, Py<PyAny>)> {
+	) -> PyResult<(Py<PyAny>)> {
 		arrayfire::set_backend(arrayfire::Backend::CUDA);
 		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
 		let neuron_size: u64 = arch_search.neural_network.netdata.neuron_size.clone();
@@ -1518,6 +1598,7 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 			traindata_x.insert(traj as u64, train_x_rust_vec);
 			traindata_y.insert(traj as u64, train_y_rust_vec);
 		}
+		#[cfg(feature = "debug-output")]
 		println!("traindata_x length: {:?}", traindata_x.len());
 		let mut batch_idx = 0;
 		let epoch_num = traindata_x.len() as u64;
@@ -1616,7 +1697,7 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 			&mut grad_input2
 		);
 
-		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
+		//let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
 		shuffle_weights(
 			i,
 			&mut arch_search
@@ -1653,13 +1734,9 @@ fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
 		// let nd_array_grad_input = Array::from_shape_vec((d0,d1,d2,d3), grad_input_back_to_cnn).unwrap();
 		// let nd_obj_grad_input = nd_array_grad_input.clone().into_pyarray(py);
 
-
-		
-		// Return updated arch_search with new parameters
-		let updated_arch_search = pythonize(py, &arch_search).unwrap();
 		
 		// Return both grad_input and updated arch_search
-		Ok((updated_arch_search, nd_obj_grad_input.to_object(py)))
+		Ok((nd_obj_grad_input.to_object(py)))
 		
 	}
 	Ok(())

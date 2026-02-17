@@ -14,8 +14,8 @@ from io import StringIO
 
 #from sklearn.datasets import load_iris as sklearn_load_iris
 #from sklearn.model_selection import train_test_split
-#from sklearn.metrics import accuracy_score
-#from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import precision_recall_fscore_support
 from sklearn.datasets import fetch_openml
 
 
@@ -115,17 +115,17 @@ def main():
 
     loss_function = "sigmoid_cross_entropy_5"
 
-    max_epoch = 100000
+    max_epoch = 200000
     stop_epoch = 1000000
     stop_train_loss = 0.005
 
-    max_alpha = 0.01
+    max_alpha = 0.005
 
-    exit_counter_threshold = 100000
+    exit_counter_threshold = 200000
     shuffle_counter_threshold = 200
 
-    max_input_size = 1176  # CNN features: 24 * 7 * 7
-    input_size = 1176
+    #max_input_size = 1176  # CNN features: 24 * 7 * 7
+    #input_size = 1176
     train_x = np.zeros((input_size,batch_size,traj_size,training_samples)).astype(np.float32)
     train_y = np.zeros((output_size,batch_size,traj_size,training_samples)).astype(np.float32)
 
@@ -158,11 +158,14 @@ def main():
         def __init__(self, pretrained_path = None):
             super(Training_with_train_network, self).__init__()
 
-            self.conv1 = nn.Conv2d(in_channels=1, out_channels=12, kernel_size=3, stride=1, padding=1)
+            self.conv1 = nn.Conv2d(in_channels=1, out_channels=12, 
+            kernel_size=3, stride=1, padding=1)
             self.pool = nn.MaxPool2d(kernel_size=2)
-            self.conv2 = nn.Conv2d(in_channels=12, out_channels=12, kernel_size=3, stride=1, padding=1)
-            self.conv3 = nn.Conv2d(in_channels=12, out_channels=24, kernel_size=3, stride=1, padding=1)
-            self.drop = nn.Dropout2d(p=0.2)
+            self.conv2 = nn.Conv2d(in_channels=12, out_channels=64, # out=12
+            kernel_size=3, stride=1, padding=1)
+            self.conv3 = nn.Conv2d(in_channels=64, out_channels=16, # out=24
+            kernel_size=3, stride=1, padding=1)
+            self.drop = nn.Dropout2d(p=0.1)
 
             if pretrained_path and os.path.isfile(pretrained_path):
                 state_dict = torch.load(pretrained_path)
@@ -171,7 +174,7 @@ def main():
             else:
                 print("Using random CNN initialization")
 
-        def cnn(self, raw_images, verbose=False):
+        def cnn(self, raw_images, y_train, y_test, verbose=False):
             # First convolutional layer + pooling
             x = F.relu(self.pool(self.conv1(raw_images)))
             if verbose:
@@ -232,7 +235,58 @@ def main():
                     shuffle_counter_threshold,
                     arch_search
                 )
+            test_x = np.zeros((input_size,batch_size,traj_size,testing_samples)).astype(np.float32)
+            test_y = np.zeros((output_size,batch_size,traj_size,testing_samples)).astype(np.float32)
+            print(f"test_x shape: {test_x.shape}")
+            print(f"test_y shape: {test_y.shape}")
+            print(f"x_test.shape[0]: {x_test.shape[0]}")
+            for i in range(x_test.shape[0]):
+                j = (i % batch_size)
+                k = int(i/batch_size)
+
+                if k >= testing_samples:
+                    print(f"WARNING: k={k} exceeds testing_samples={testing_samples}")
+                    break
+
+                test_x[:, j , 0, k ] = x_test[i,:].flatten()
+                idx = int(y_test[i])
+
+                if idx < 0 or idx >= output_size:
+                    print(f"ERROR: Invalid label {idx} for sample {i}")
+                    continue
+
+                test_y[idx , j , 0, k ] = 1.0
             
+            print("--- Test data prepared. Starting inference ---\n")
+
+            #Test Neural Network
+            output_y = raybnn_python.test_network(
+                test_x,
+
+                arch_search
+            )
+            pred = []
+            for i in range(x_test.shape[0]):
+                j = (i % batch_size)
+                k = int(i/batch_size)
+
+                sample = output_y[:, j , 0, k ]
+                #print(sample)
+
+                pred.append(np.argmax(sample))
+
+            y_test = y_test.astype(int)  # Before passing to metrics
+
+            acc = accuracy_score(y_test, np.array(pred).astype(int))
+
+            ret = precision_recall_fscore_support(y_test, pred, average='macro')
+
+            print("Accuracy: ",acc)
+            print("Precision: ",ret[0])
+            print("Recall: ",ret[1])
+            print("F1 Score: ",ret[2])
+            print("Support: ",ret[3])
+
             print("Training finished. Parsing logs...")
             
             # Parse and plot loss
@@ -277,8 +331,9 @@ def main():
 
     x_train_tensor = torch.from_numpy(x_train).float()
     x_train_tensor = x_train_tensor.unsqueeze(1)
-    feature_extractor = Training_with_train_network(pretrained_path = 'cnn_pretrained_conv_only')
-    features = feature_extractor.cnn(x_train_tensor,verbose=False)
+    #feature_extractor = Training_with_train_network(pretrained_path = 'cnn_pretrained_conv_only')
+    feature_extractor = Training_with_train_network(pretrained_path = None)
+    features = feature_extractor.cnn(x_train_tensor, y_train, y_test,verbose=False)
 
     
     # class Training_with_modified_structure_raybnn(nn.Module):
