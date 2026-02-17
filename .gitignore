@@ -1,10 +1,39 @@
 Rust_Code/target/
-magic/
 Rust_Code/Cargo.lock
+
+# Magic files
+magic/
+
+# Compressed files
 *.gz
+
+# Python artifacts
 *.pkl
 Python_Code/__pycache__
 *.txt
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+.ipynb_checkpoints/
+
 # OR strictly these specific files:
 Python_Code/test.txt
 Python_Code/output_raybnn_training_with_cnn_features.txt
+
+# Large ML/data files 
+*.npy
+*.npz
+*.pt
+*.pth
+*.h5
+*.bin
+*.ckpt
+*.safetensors
+
+# Temporary files
+/tmp/
+
+# Virtual environment
+venv/
+.env/
