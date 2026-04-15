@@ -1,0 +1,840 @@
+nohup: ignoring input
+
+
+******Network Information******
+neuron_size: 2000
+input_size: 256
+output_size: 4
+proc_num: 2
+active_size: 1261
+space_dims: 3
+step_num: 5000
+batch_size: 1000
+del_unused_neuron: true
+time_step: 0.1
+nratio: 0.5
+neuron_std: 0.001
+sphere_rad: 11.873849
+neuron_rad: 0.1
+con_rad: 9.190047
+init_prob: 0.01
+add_neuron_rate: 0
+del_neuron_rate: 0
+center_const: 0.005
+spring_const: 0.01
+repel_const: 0.01
+************
+
+
+WValues.dims()[0]: 179657
+MWT EEG data directory: /home/hbui/Downloads/RayBNN_Python/mwt_eeg
+Fold 1: train=57 subjects, test=19 subjects
+Fold 2: train=57 subjects, test=19 subjects
+Fold 3: train=57 subjects, test=19 subjects
+Fold 4: train=57 subjects, test=19 subjects
+
+======================================================================
+  4-FOLD CROSS-VALIDATION  —  Fold 1 / 4
+======================================================================
+[Fold 1] Using device: cuda
+[Fold 1] Loading training dataset (57 subjects)...
+MWTDataset: 57 subjects, 24,240,000 raw samples, stride=200 -> 121,200 effective samples
+[Fold 1] Loading test dataset (19 subjects)...
+MWTDataset: 19 subjects, 9,030,000 raw samples, stride=200 -> 45,150 effective samples
+
+======================================================================
+AREA 1 DIAGNOSTIC: Checking CNN Parameter Updates
+======================================================================
+
+=== Initial CNN Parameters ===
+conv1.weight:
+  Shape: torch.Size([32, 2, 3, 1])
+  Mean: 0.013627
+  Std: 0.133417
+  Min/Max: [-0.389359, 0.357905]
+conv1.bias:
+  Shape: torch.Size([32])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn1.weight:
+  Shape: torch.Size([32])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn1.bias:
+  Shape: torch.Size([32])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+conv2.weight:
+  Shape: torch.Size([64, 32, 3, 1])
+  Mean: 0.000471
+  Std: 0.084322
+  Min/Max: [-0.350844, 0.295324]
+conv2.bias:
+  Shape: torch.Size([64])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn2.weight:
+  Shape: torch.Size([64])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn2.bias:
+  Shape: torch.Size([64])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+conv3.weight:
+  Shape: torch.Size([128, 64, 3, 1])
+  Mean: -0.000009
+  Std: 0.058857
+  Min/Max: [-0.270115, 0.213194]
+conv3.bias:
+  Shape: torch.Size([128])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn3.weight:
+  Shape: torch.Size([128])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn3.bias:
+  Shape: torch.Size([128])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+conv4.weight:
+  Shape: torch.Size([128, 128, 3, 1])
+  Mean: -0.000037
+  Std: 0.051041
+  Min/Max: [-0.250322, 0.227114]
+conv4.bias:
+  Shape: torch.Size([128])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn4.weight:
+  Shape: torch.Size([128])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn4.bias:
+  Shape: torch.Size([128])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+conv5.weight:
+  Shape: torch.Size([128, 128, 3, 1])
+  Mean: -0.000294
+  Std: 0.051165
+  Min/Max: [-0.224993, 0.239964]
+conv5.bias:
+  Shape: torch.Size([128])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn5.weight:
+  Shape: torch.Size([128])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn5.bias:
+  Shape: torch.Size([128])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+conv6.weight:
+  Shape: torch.Size([128, 128, 3, 1])
+  Mean: 0.000179
+  Std: 0.051058
+  Min/Max: [-0.237737, 0.223240]
+conv6.bias:
+  Shape: torch.Size([128])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn6.weight:
+  Shape: torch.Size([128])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn6.bias:
+  Shape: torch.Size([128])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+conv7.weight:
+  Shape: torch.Size([256, 128, 3, 1])
+  Mean: -0.000023
+  Std: 0.041691
+  Min/Max: [-0.208875, 0.187633]
+conv7.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn7.weight:
+  Shape: torch.Size([256])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn7.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+conv8.weight:
+  Shape: torch.Size([256, 256, 3, 1])
+  Mean: -0.000099
+  Std: 0.036170
+  Min/Max: [-0.159548, 0.160207]
+conv8.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn8.weight:
+  Shape: torch.Size([256])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn8.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+conv9.weight:
+  Shape: torch.Size([256, 256, 3, 1])
+  Mean: 0.000111
+  Std: 0.036042
+  Min/Max: [-0.149735, 0.164074]
+conv9.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn9.weight:
+  Shape: torch.Size([256])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn9.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+conv10.weight:
+  Shape: torch.Size([256, 256, 3, 1])
+  Mean: -0.000101
+  Std: 0.035953
+  Min/Max: [-0.163172, 0.165492]
+conv10.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn10.weight:
+  Shape: torch.Size([256])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn10.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+conv11.weight:
+  Shape: torch.Size([256, 256, 3, 1])
+  Mean: -0.000107
+  Std: 0.036067
+  Min/Max: [-0.168156, 0.152059]
+conv11.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn11.weight:
+  Shape: torch.Size([256])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn11.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+conv12.weight:
+  Shape: torch.Size([256, 256, 3, 1])
+  Mean: 0.000045
+  Std: 0.036101
+  Min/Max: [-0.159789, 0.157571]
+conv12.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn12.weight:
+  Shape: torch.Size([256])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn12.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn_dense1.weight:
+  Shape: torch.Size([256])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn_dense1.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+fc1.weight:
+  Shape: torch.Size([256, 256])
+  Mean: 0.000109
+  Std: 0.062312
+  Min/Max: [-0.268072, 0.270196]
+fc1.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+bn_dense2.weight:
+  Shape: torch.Size([256])
+  Mean: 1.000000
+  Std: 0.000000
+  Min/Max: [1.000000, 1.000000]
+bn_dense2.bias:
+  Shape: torch.Size([256])
+  Mean: 0.000000
+  Std: 0.000000
+  Min/Max: [0.000000, 0.000000]
+MODE: Train both (lr=0.0008, alpha0=0.0005)
+
+======================================================================
+ MODEL COMPLEXITY SUMMARY
+======================================================================
+  CNN parameters      :  1,332,960  (trainable: 1,332,960)
+  RayBNN parameters   :    191,657
+  Total parameters    :  1,524,617
+  CNN layers:
+    conv1.weight          shape=[32, 2, 3, 1]         params=192
+    conv1.bias            shape=[32]                  params=32
+    bn1.weight            shape=[32]                  params=32
+    bn1.bias              shape=[32]                  params=32
+    conv2.weight          shape=[64, 32, 3, 1]        params=6,144
+    conv2.bias            shape=[64]                  params=64
+    bn2.weight            shape=[64]                  params=64
+    bn2.bias              shape=[64]                  params=64
+    conv3.weight          shape=[128, 64, 3, 1]       params=24,576
+    conv3.bias            shape=[128]                 params=128
+    bn3.weight            shape=[128]                 params=128
+    bn3.bias              shape=[128]                 params=128
+    conv4.weight          shape=[128, 128, 3, 1]      params=49,152
+    conv4.bias            shape=[128]                 params=128
+    bn4.weight            shape=[128]                 params=128
+    bn4.bias              shape=[128]                 params=128
+    conv5.weight          shape=[128, 128, 3, 1]      params=49,152
+    conv5.bias            shape=[128]                 params=128
+    bn5.weight            shape=[128]                 params=128
+    bn5.bias              shape=[128]                 params=128
+    conv6.weight          shape=[128, 128, 3, 1]      params=49,152
+    conv6.bias            shape=[128]                 params=128
+    bn6.weight            shape=[128]                 params=128
+    bn6.bias              shape=[128]                 params=128
+    conv7.weight          shape=[256, 128, 3, 1]      params=98,304
+    conv7.bias            shape=[256]                 params=256
+    bn7.weight            shape=[256]                 params=256
+    bn7.bias              shape=[256]                 params=256
+    conv8.weight          shape=[256, 256, 3, 1]      params=196,608
+    conv8.bias            shape=[256]                 params=256
+    bn8.weight            shape=[256]                 params=256
+    bn8.bias              shape=[256]                 params=256
+    conv9.weight          shape=[256, 256, 3, 1]      params=196,608
+    conv9.bias            shape=[256]                 params=256
+    bn9.weight            shape=[256]                 params=256
+    bn9.bias              shape=[256]                 params=256
+    conv10.weight         shape=[256, 256, 3, 1]      params=196,608
+    conv10.bias           shape=[256]                 params=256
+    bn10.weight           shape=[256]                 params=256
+    bn10.bias             shape=[256]                 params=256
+    conv11.weight         shape=[256, 256, 3, 1]      params=196,608
+    conv11.bias           shape=[256]                 params=256
+    bn11.weight           shape=[256]                 params=256
+    bn11.bias             shape=[256]                 params=256
+    conv12.weight         shape=[256, 256, 3, 1]      params=196,608
+    conv12.bias           shape=[256]                 params=256
+    bn12.weight           shape=[256]                 params=256
+    bn12.bias             shape=[256]                 params=256
+    bn_dense1.weight      shape=[256]                 params=256
+    bn_dense1.bias        shape=[256]                 params=256
+    fc1.weight            shape=[256, 256]            params=65,536
+    fc1.bias              shape=[256]                 params=256
+    bn_dense2.weight      shape=[256]                 params=256
+    bn_dense2.bias        shape=[256]                 params=256
+  Memory before training: 1512.9 MB
+  Train batches per epoch: 121
+  Train samples: 121,200
+  Test samples: 45,150
+======================================================================
+
+==================================================
+ TRAINING: 15 epochs, batch_size=1000
+ alpha0=0.0005, lr=0.0008
+==================================================
+After block1 (32 filt): torch.Size([1000, 32, 1600, 1])
+After block2 (64 filt): torch.Size([1000, 64, 800, 1])
+After block3 (128 filt): torch.Size([1000, 128, 400, 1])
+After block4 (128 filt): torch.Size([1000, 128, 200, 1])
+After block5 (128 filt): torch.Size([1000, 128, 100, 1])
+After block6 (128 filt): torch.Size([1000, 128, 50, 1])
+After block7  (256 filt): torch.Size([1000, 256, 25, 1])
+After block8  (256 filt): torch.Size([1000, 256, 12, 1])
+After block9  (256 filt): torch.Size([1000, 256, 6, 1])
+After block10 (256 filt): torch.Size([1000, 256, 3, 1])
+After block11 (256 filt): torch.Size([1000, 256, 1, 1])
+After block12 (256 filt): torch.Size([1000, 256, 1, 1])
+After adaptive pool: torch.Size([1000, 256, 1, 1])
+After flatten: torch.Size([1000, 256])
+After dense head (features): torch.Size([1000, 256])
+
+======================================================================
+DIAGNOSTIC: CNN Output (Features) BEFORE entering RayBNN
+======================================================================
+  Shape: torch.Size([1000, 256])
+  Mean: -0.002827
+  Std: 1.408838
+  Min: -1.680664
+  Max: 34.468750
+  Variance across samples (per feature): 1.985760
+  Variance across features (per sample): 1.926612
+  Features vary across samples
+======================================================================
+
+[FORWARD AutoGrad] CNN features reshaped as RayBNN input:  (256, 1000, 1, 1)
+[MAIN FWD] Yhat mean=0.000025 max=0.035917 min=-0.053043 std=0.005324
+
+======================================================================
+AREA 4 DIAGNOSTIC: RayBNN Yhat (CNN->RayBNN->Softmax input) (Epoch 1, Batch 0)
+======================================================================
+
+Output Statistics:
+  Shape: torch.Size([1000, 4])
+  Range: [-0.0530, 0.0359]
+  Mean: 0.0000
+  Std: 0.0053
+  Entropy: 1.3863/1.386 (random=1.386)
+  WARNING: High entropy - predictions are near-random!
+======================================================================
+
+[BACKWARD AutoGrad] CNN features shape:  torch.Size([1000, 256])
+y_label shape:  torch.Size([1000])
+[BACKWARD AutoGrad] Calling RayBNN backward using reshaped CNN features shape: (256, 1000, 1, 1)
+grad_result shape:  (256, 1000, 1, 1)
+grad_output shape:  torch.Size([1000, 4])
+
+======================================================================
+DIAGNOSTIC: dL/dX_raybnn (Epoch 1, Batch 0)
+  Shape: torch.Size([1000, 256])  Mean: 0.00000001  Std: 0.00000221
+  Min: -0.00000724  Max: 0.00000660
+  RayBNN grad magnitude: 0.00000143
+  Per-sample grad norm std: 0.00000082
+  Gradient-feature correlation: 0.000661
+======================================================================
+
+======================================================================
+AREA 2 DIAGNOSTIC: CNN Parameters Gradients AFTER backprop (Epoch 0, Batch 0)
+======================================================================
+
+=== CNN Gradients ===
+
+conv1.weight:
+  Gradient mean: 0.00612277
+  Gradient max: 0.03082275
+  Gradient min: 0.00004905
+  Healthy gradient magnitude
+
+conv1.bias:
+  Gradient mean: 0.01354605
+  Gradient max: 0.04223633
+  Gradient min: 0.00003922
+  Healthy gradient magnitude
+
+bn1.weight:
+  Gradient mean: 0.00249803
+  Gradient max: 0.00678992
+  Gradient min: 0.00009426
+  Healthy gradient magnitude
+
+bn1.bias:
+  Gradient mean: 0.00264563
+  Gradient max: 0.00576043
+  Gradient min: 0.00038505
+  Healthy gradient magnitude
+
+conv2.weight:
+  Gradient mean: 0.00172660
+  Gradient max: 0.01252747
+  Gradient min: 0.00000060
+  Healthy gradient magnitude
+
+conv2.bias:
+  Gradient mean: 0.00138224
+  Gradient max: 0.00386810
+  Gradient min: 0.00001472
+  Healthy gradient magnitude
+
+bn2.weight:
+  Gradient mean: 0.00130428
+  Gradient max: 0.00425534
+  Gradient min: 0.00006943
+  Healthy gradient magnitude
+
+bn2.bias:
+  Gradient mean: 0.00116990
+  Gradient max: 0.00368631
+  Gradient min: 0.00001502
+  Healthy gradient magnitude
+
+conv3.weight:
+  Gradient mean: 0.00109401
+  Gradient max: 0.01050568
+  Gradient min: 0.00000006
+  Healthy gradient magnitude
+
+conv3.bias:
+  Gradient mean: 0.00065444
+  Gradient max: 0.00216293
+  Gradient min: 0.00000477
+  Healthy gradient magnitude
+
+bn3.weight:
+  Gradient mean: 0.00073861
+  Gradient max: 0.00310009
+  Gradient min: 0.00000492
+  Healthy gradient magnitude
+
+bn3.bias:
+  Gradient mean: 0.00056178
+  Gradient max: 0.00223541
+  Gradient min: 0.00000101
+  Healthy gradient magnitude
+
+conv4.weight:
+  Gradient mean: 0.00072121
+  Gradient max: 0.00546265
+  Gradient min: 0.00000000
+  Healthy gradient magnitude
+
+conv4.bias:
+  Gradient mean: 0.00034984
+  Gradient max: 0.00125217
+  Gradient min: 0.00000352
+  Healthy gradient magnitude
+
+bn4.weight:
+  Gradient mean: 0.00052157
+  Gradient max: 0.00206683
+  Gradient min: 0.00000173
+  Healthy gradient magnitude
+
+bn4.bias:
+  Gradient mean: 0.00043081
+  Gradient max: 0.00165862
+  Gradient min: 0.00000823
+  Healthy gradient magnitude
+
+conv5.weight:
+  Gradient mean: 0.00056427
+  Gradient max: 0.00418472
+  Gradient min: 0.00000000
+  Healthy gradient magnitude
+
+conv5.bias:
+  Gradient mean: 0.00029018
+  Gradient max: 0.00103378
+  Gradient min: 0.00000197
+  Healthy gradient magnitude
+
+bn5.weight:
+  Gradient mean: 0.00044580
+  Gradient max: 0.00152836
+  Gradient min: 0.00000244
+  Healthy gradient magnitude
+
+bn5.bias:
+  Gradient mean: 0.00037610
+  Gradient max: 0.00168616
+  Gradient min: 0.00000316
+  Healthy gradient magnitude
+
+conv6.weight:
+  Gradient mean: 0.00044838
+  Gradient max: 0.00337601
+  Gradient min: 0.00000006
+  Healthy gradient magnitude
+
+conv6.bias:
+  Gradient mean: 0.00021128
+  Gradient max: 0.00082684
+  Gradient min: 0.00000054
+  Healthy gradient magnitude
+
+bn6.weight:
+  Gradient mean: 0.00032585
+  Gradient max: 0.00149181
+  Gradient min: 0.00000527
+  Healthy gradient magnitude
+
+bn6.bias:
+  Gradient mean: 0.00027476
+  Gradient max: 0.00136077
+  Gradient min: 0.00000387
+  Healthy gradient magnitude
+
+conv7.weight:
+  Gradient mean: 0.00031904
+  Gradient max: 0.00211525
+  Gradient min: 0.00000000
+  Healthy gradient magnitude
+
+conv7.bias:
+  Gradient mean: 0.00015284
+  Gradient max: 0.00068092
+  Gradient min: 0.00000060
+  Healthy gradient magnitude
+
+bn7.weight:
+  Gradient mean: 0.00020388
+  Gradient max: 0.00077180
+  Gradient min: 0.00000083
+  Healthy gradient magnitude
+
+bn7.bias:
+  Gradient mean: 0.00016716
+  Gradient max: 0.00067955
+  Gradient min: 0.00000072
+  Healthy gradient magnitude
+
+conv8.weight:
+  Gradient mean: 0.00021276
+  Gradient max: 0.00176430
+  Gradient min: 0.00000000
+  Healthy gradient magnitude
+
+conv8.bias:
+  Gradient mean: 0.00008741
+  Gradient max: 0.00040317
+  Gradient min: 0.00000066
+  Healthy gradient magnitude
+
+bn8.weight:
+  Gradient mean: 0.00016498
+  Gradient max: 0.00071882
+  Gradient min: 0.00000039
+  Healthy gradient magnitude
+
+bn8.bias:
+  Gradient mean: 0.00012092
+  Gradient max: 0.00044745
+  Gradient min: 0.00000072
+  Healthy gradient magnitude
+
+conv9.weight:
+  Gradient mean: 0.00016810
+  Gradient max: 0.00117111
+  Gradient min: 0.00000000
+  Healthy gradient magnitude
+
+conv9.bias:
+  Gradient mean: 0.00004712
+  Gradient max: 0.00022352
+  Gradient min: 0.00000024
+  Healthy gradient magnitude
+
+bn9.weight:
+  Gradient mean: 0.00015073
+  Gradient max: 0.00059426
+  Gradient min: 0.00000117
+  Healthy gradient magnitude
+
+bn9.bias:
+  Gradient mean: 0.00011163
+  Gradient max: 0.00039190
+  Gradient min: 0.00000030
+  Healthy gradient magnitude
+
+conv10.weight:
+  Gradient mean: 0.00014090
+  Gradient max: 0.00106049
+  Gradient min: 0.00000000
+  Healthy gradient magnitude
+
+conv10.bias:
+  Gradient mean: 0.00001976
+  Gradient max: 0.00008935
+  Gradient min: 0.00000000
+  Healthy gradient magnitude
+
+bn10.weight:
+  Gradient mean: 0.00011542
+  Gradient max: 0.00043378
+  Gradient min: 0.00000210
+  Healthy gradient magnitude
+
+bn10.bias:
+  Gradient mean: 0.00009097
+  Gradient max: 0.00028837
+  Gradient min: 0.00000024
+  Healthy gradient magnitude
+
+conv11.weight:
+  Gradient mean: 0.00011509
+  Gradient max: 0.00102425
+  Gradient min: 0.00000000
+  Healthy gradient magnitude
+
+conv11.bias:
+  Gradient mean: 0.00000814
+  Gradient max: 0.00006175
+  Gradient min: 0.00000000
+  Healthy gradient magnitude
+
+bn11.weight:
+  Gradient mean: 0.00008626
+  Gradient max: 0.00033946
+  Gradient min: 0.00000046
+  Healthy gradient magnitude
+
+bn11.bias:
+  Gradient mean: 0.00005887
+  Gradient max: 0.00018007
+  Gradient min: 0.00000066
+  Healthy gradient magnitude
+
+conv12.weight:
+  Gradient mean: 0.00005124
+  Gradient max: 0.00126553
+  Gradient min: 0.00000000
+  Healthy gradient magnitude
+
+conv12.bias:
+  Gradient mean: 0.00000792
+  Gradient max: 0.00002271
+  Gradient min: 0.00000006
+  Healthy gradient magnitude
+
+bn12.weight:
+  Gradient mean: 0.00000041
+  Gradient max: 0.00000530
+  Gradient min: 0.00000001
+  CRITICAL: Vanishing gradients! (mean < 1e-6)
+
+bn12.bias:
+  Gradient mean: 0.00005223
+  Gradient max: 0.00019473
+  Gradient min: 0.00000048
+  Healthy gradient magnitude
+
+bn_dense1.weight:
+  Gradient mean: 0.00007980
+  Gradient max: 0.00043240
+  Gradient min: 0.00000030
+  Healthy gradient magnitude
+
+bn_dense1.bias:
+  Gradient mean: 0.00005992
+  Gradient max: 0.00019383
+  Gradient min: 0.00000012
+  Healthy gradient magnitude
+
+fc1.weight:
+  Gradient mean: 0.00005165
+  Gradient max: 0.00104904
+  Gradient min: 0.00000000
+  Healthy gradient magnitude
+
+fc1.bias:
+  Gradient mean: 0.00002161
+  Gradient max: 0.00015473
+  Gradient min: 0.00000012
+  Healthy gradient magnitude
+
+bn_dense2.weight:
+  Gradient mean: 0.00003798
+  Gradient max: 0.00039889
+  Gradient min: 0.00000001
+  Healthy gradient magnitude
+
+bn_dense2.bias:
+  Gradient mean: 0.00123189
+  Gradient max: 0.00619018
+  Gradient min: 0.00000024
+  Healthy gradient magnitude
+
+======================================================================
+
+
+=== CNN Parameter Delta (Epoch 1, after optimizer.step) ===
+  conv1.weight: mean_delta=0.00080000, max_delta=0.00080001
+  conv1.bias: mean_delta=0.00079999, max_delta=0.00080000
+  bn1.weight: mean_delta=0.00080001, max_delta=0.00080001
+  bn1.bias: mean_delta=0.00079999, max_delta=0.00080000
+  conv2.weight: mean_delta=0.00079997, max_delta=0.00080000
+  conv2.bias: mean_delta=0.00079997, max_delta=0.00080000
+  bn2.weight: mean_delta=0.00080000, max_delta=0.00080001
+  bn2.bias: mean_delta=0.00079997, max_delta=0.00080000
+  conv3.weight: mean_delta=0.00079995, max_delta=0.00080000
+  conv3.bias: mean_delta=0.00079995, max_delta=0.00080000
+  bn3.weight: mean_delta=0.00079997, max_delta=0.00080001
+  bn3.bias: mean_delta=0.00079987, max_delta=0.00080000
+  conv4.weight: mean_delta=0.00079991, max_delta=0.00080000
+  conv4.bias: mean_delta=0.00079989, max_delta=0.00079999
+  bn4.weight: mean_delta=0.00079991, max_delta=0.00080001
+  bn4.bias: mean_delta=0.00079995, max_delta=0.00080000
+  conv5.weight: mean_delta=0.00079985, max_delta=0.00080000
+  conv5.bias: mean_delta=0.00079987, max_delta=0.00079999
+  bn5.weight: mean_delta=0.00079992, max_delta=0.00080001
+  bn5.bias: mean_delta=0.00079987, max_delta=0.00080000
+  conv6.weight: mean_delta=0.00079989, max_delta=0.00080000
+  conv6.bias: mean_delta=0.00079979, max_delta=0.00079999
+  bn6.weight: mean_delta=0.00079993, max_delta=0.00080001
+  bn6.bias: mean_delta=0.00079989, max_delta=0.00079999
+  conv7.weight: mean_delta=0.00079979, max_delta=0.00080000
+  conv7.bias: mean_delta=0.00079972, max_delta=0.00079999
+  bn7.weight: mean_delta=0.00079980, max_delta=0.00080001
+  bn7.bias: mean_delta=0.00079980, max_delta=0.00079999
+  conv8.weight: mean_delta=0.00079971, max_delta=0.00079999
+  conv8.bias: mean_delta=0.00079966, max_delta=0.00079998
+  bn8.weight: mean_delta=0.00079970, max_delta=0.00080001
+  bn8.bias: mean_delta=0.00079976, max_delta=0.00079998
+  conv9.weight: mean_delta=0.00079964, max_delta=0.00079999
+  conv9.bias: mean_delta=0.00079919, max_delta=0.00079996
+  bn9.weight: mean_delta=0.00079982, max_delta=0.00080001
+  bn9.bias: mean_delta=0.00079965, max_delta=0.00079998
+  conv10.weight: mean_delta=0.00079953, max_delta=0.00079999
+  conv10.bias: mean_delta=0.00079440, max_delta=0.00079991
+  bn10.weight: mean_delta=0.00079984, max_delta=0.00080001
+  bn10.bias: mean_delta=0.00079947, max_delta=0.00079997
+  conv11.weight: mean_delta=0.00079941, max_delta=0.00079999
+  conv11.bias: mean_delta=0.00079020, max_delta=0.00079987
+  bn11.weight: mean_delta=0.00079963, max_delta=0.00080001
+  bn11.bias: mean_delta=0.00079953, max_delta=0.00079996
+  conv12.weight: mean_delta=0.00026652, max_delta=0.00079999
+  conv12.bias: mean_delta=0.00079510, max_delta=0.00079965
+  bn12.weight: mean_delta=0.00074959, max_delta=0.00079846
+  bn12.bias: mean_delta=0.00079953, max_delta=0.00079996
+  bn_dense1.weight: mean_delta=0.00079953, max_delta=0.00080001
+  bn_dense1.bias: mean_delta=0.00079928, max_delta=0.00079996
+  fc1.weight: mean_delta=0.00079328, max_delta=0.00079999
+  fc1.bias: mean_delta=0.00079726, max_delta=0.00079995
+  bn_dense2.weight: mean_delta=0.00079180, max_delta=0.00080001
+  bn_dense2.bias: mean_delta=0.00079959, max_delta=0.00080000

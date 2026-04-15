@@ -385,7 +385,7 @@ pub fn train_network(
 	let mut mt = arrayfire::constant::<f32>(0.0,mt_dims);
 	let mut vt = arrayfire::constant::<f32>(0.0,mt_dims);
 	let mut grad = arrayfire::constant::<f32>(0.0,mt_dims);
-	let mut grad_input = arrayfire::constant::<f32>(0.0,X_dims);
+	let mut dL_dX = arrayfire::constant::<f32>(0.0,X_dims);
 	let mut grad_input2 = arrayfire::constant::<f32>(0.0,X_dims);
 
 
@@ -632,7 +632,7 @@ pub fn train_network(
 
 		
 		&mut grad,
-		&mut grad_input,
+		&mut dL_dX,
 		&mut grad_input2,
 	);
 	
@@ -1161,7 +1161,7 @@ pub fn train_network(
 
 					*/
 
-
+					// neuron deletion fires here
 					shuffle_weights(
 						i,
 						arch_search
@@ -1363,7 +1363,7 @@ pub fn train_network(
 
 			
 			&mut grad,
-			&mut grad_input,
+			&mut dL_dX,
 			&mut grad_input2,
 		);
 		

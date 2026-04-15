@@ -487,7 +487,7 @@ pub fn state_space_forward_batch(
     Z: &mut arrayfire::Array<f32>,
     Q: &mut arrayfire::Array<f32>
 ) {
-    println!("START forward pass! ");
+    //println!("START FORWARD PASS! ");
     
     let neuron_size: u64 = netdata.neuron_size.clone();
     //let proc_num: u64 = netdata.proc_num.clone();
@@ -508,7 +508,7 @@ pub fn state_space_forward_batch(
     
     // Before the loop
     //#[cfg(feature = "debug-output")]
-    println!("S initial shape: {:?}", S.dims());
+    //println!("S initial shape: {:?}", S.dims());
 
 
 
@@ -527,7 +527,7 @@ pub fn state_space_forward_batch(
     // println!("WValues.dims(): {:?}", WValues.dims());
     // println!("WRowIdxCSR.dims(): {:?}", WRowIdxCSR.dims());
     // println!("WColIdx.dims(): {:?}", WColIdx.dims());
-    println!("neuron_size: {}", neuron_size);
+    //println!("neuron_size: {}", neuron_size);
 
 // Check if dimensions match
 if WValues.dims()[0] != WColIdx.dims()[0] {
@@ -550,13 +550,13 @@ if WValues.dims()[0] != WColIdx.dims()[0] {
     Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
     let sample_Q = arrayfire::index(&Q, &[Seq::new(0.0, 19.0, 1.0), 
     Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
-    af_print!("Z value BEFORE being assigned S in FWP:",sample_Z);
-    af_print!("Q value BEFORE being assigned S in FWP:",sample_Q);
+    //af_print!("Z value BEFORE being assigned S in FWP:",sample_Z);
+    //af_print!("Q value BEFORE being assigned S in FWP:",sample_Q);
     for i in 0i64..Zslices
     {   
 
         if i == 0 {
-            println!("\n--- Time step 0: Verifying input placement ---");
+            //println!("\n--- Time step 0: Verifying input placement ---");
             
             // Check which rows of S contain the external input
             let input_rows = arrayfire::rows(&S, 0, (input_size-1) as i64);
@@ -604,9 +604,9 @@ if WValues.dims()[0] != WColIdx.dims()[0] {
     Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
     let sample_Q_after = arrayfire::index(&Q, &[Seq::new(0.0, 19.0, 1.0), 
     Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
-    af_print!("Z value AFTER being assigned S in FWP:",sample_Z_after);
-    af_print!("Q value AFTER being assigned S in FWP:",sample_Q_after);
-    println!("FINISH FORWARD PASS! \n");
+    //af_print!("Z value AFTER being assigned S in FWP:",sample_Z_after);
+    //af_print!("Q value AFTER being assigned S in FWP:",sample_Q_after);
+    //println!("FINISH FORWARD PASS! \n");
     
 }
 
@@ -718,7 +718,7 @@ pub fn state_space_backward_group2(
     let output_size: u64 = netdata.output_size.clone();
     let proc_num: u64 = netdata.proc_num.clone();
 
-    println!("===== START THE BACKWARD PASS ===== \n");
+    //println!("===== START THE BACKWARD PASS ===== \n");
 
     let batch_size: u64 = netdata.batch_size.clone();
 
@@ -731,8 +731,8 @@ pub fn state_space_backward_group2(
     //Get current selection of neurons
 
     let active_size = neuron_idx.dims()[0];
-    println!("\n--- NEURON INDEX VERIFICATION ---");
-    println!("Total active neurons: {}", active_size);
+    //println!("\n--- NEURON INDEX VERIFICATION ---");
+    //println!("Total active neurons: {}", active_size);
     let idxsel = arrayfire::rows(neuron_idx, (active_size-output_size) as i64, (active_size-1)   as i64);
 
 
@@ -858,9 +858,9 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
     //Main loop
     for i in (0i64..Zslices).rev() {
         //println!(" Start main loop\n");
-        println!("|network_f32| Timestep: {:?} \n", i);
+        //println!("|network_f32| Timestep: {:?} \n", i);
 
-        println!("Number of current active neurons: {:?}",active_size);
+        //println!("Number of current active neurons: {:?}",active_size);
         // af_print!("Index of output neurons:", idxsel);
 
         // Print samples
@@ -868,8 +868,8 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
     Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
     let backward_sample_Q_before = arrayfire::index(&Q, &[Seq::new(0.0, 19.0, 1.0), 
     Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
-        af_print!("[BACKWARD PASS] Z value BEFORE backward pass: ",backward_sample_Z_before);
-        af_print!("[BACKWARD PASS] Q value BEFORE backward pass: ",backward_sample_Q_before);
+        //af_print!("[BACKWARD PASS] Z value BEFORE backward pass: ",backward_sample_Z_before);
+        //af_print!("[BACKWARD PASS] Q value BEFORE backward pass: ",backward_sample_Q_before);
         //Select X value
         let mut idxrs = arrayfire::Indexer::default();
         sliceseq = arrayfire::Seq::new(i as f32, i as f32, 1.0);
@@ -1165,11 +1165,11 @@ Slice 4: [error_neuron_0_sample_4, error_neuron_1_sample_4, error_neuron_2_sampl
             Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
         let backward_sample_Q_after = arrayfire::index(&Q, &[Seq::new(0.0, 19.0, 1.0), 
             Seq::new(0.0, 19.0, 1.0), Seq::default(), Seq::default()]);
-        af_print!("[BACKWARD PASS] Z value AFTER backward pass: ",backward_sample_Z_after);
-        af_print!("[BACKWARD PASS] Q value AFTER backward pass: ",backward_sample_Q_after);
+        //af_print!("[BACKWARD PASS] Z value AFTER backward pass: ",backward_sample_Z_after);
+        //af_print!("[BACKWARD PASS] Q value AFTER backward pass: ",backward_sample_Q_after);
     }
 
-    println!("FINISH backward pass! \n");
+    //println!("FINISH BACKWARD PASS! \n");
 }
 
 

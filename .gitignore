@@ -5,7 +5,11 @@ Rust_Code/Cargo.lock
 magic/
 
 # Compressed files
-*.gz
+*.zip
+*.tar.gz
+*.csv
+data/
+datasets/
 
 # Python artifacts
 *.pkl
@@ -18,8 +22,8 @@ __pycache__/
 .ipynb_checkpoints/
 
 # OR strictly these specific files:
-Python_Code/test.txt
-Python_Code/output_raybnn_training_with_cnn_features.txt
+# Python_Code/test.txt
+# Python_Code/output_raybnn_training_with_cnn_features.txt
 
 # Large ML/data files 
 *.npy
@@ -36,4 +40,10 @@ Python_Code/output_raybnn_training_with_cnn_features.txt
 
 # Virtual environment
 venv/
+.venv/
 .env/
+
+# System and IDE Files
+__pycache__/
+.DS_Store
+.vscode/

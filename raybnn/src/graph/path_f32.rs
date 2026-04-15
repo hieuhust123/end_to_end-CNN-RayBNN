@@ -123,7 +123,7 @@ pub fn find_path_backward_group2(
     Eseqs: &mut [arrayfire::Seq<i32>; 1]
 
 ) {
-    println!("---- Start find_path_backward_group2() ----\n ");
+    //println!("---- Start find_path_backward_group2() ----\n ");
 
 
     let neuron_size: u64 = netdata.neuron_size.clone();
@@ -202,7 +202,7 @@ pub fn find_path_backward_group2(
     /// Main loop loop over traj_steps in reverse order
     for i in (0i64..(Xslices as i64)).rev() {
         //println!(" Start main loop\n");
-        println!("|path_f32| Processing timestep: {:?} \n", i);
+        //println!("|path_f32| Processing timestep: {:?} \n", i);
 
         idxsel = newidxsel.clone(); // = 3
         idxsel_out.insert(i, idxsel.clone());
@@ -495,7 +495,7 @@ Step 3: Sources [50, 75, 125, 175] → Find sources [25, 40, 60, 90]
     *Dseqs = [arrayfire::Seq::new(Dstart as i32, Dend as i32, 1i32)];
     *Eseqs = [arrayfire::Seq::new(Estart as i32, Eend as i32, 1i32)];
 
-    println!("\n ---------------------- \n");
+    //println!("\n ---------------------- \n");
     // println!("[PARAMS] Global parameter sequence boundaries of W: {:?} \n", Wseqs);
     // println!("[PARAMS] Global parameter sequence boundaries of H: {:?} \n", Hseqs);
     // println!("[PARAMS] Global parameter sequence boundaries of A: {:?} \n", Aseqs);
@@ -504,7 +504,7 @@ Step 3: Sources [50, 75, 125, 175] → Find sources [25, 40, 60, 90]
     // println!("[PARAMS] Global parameter sequence boundaries of D: {:?} \n", Dseqs);
     // println!("[PARAMS] Global parameter sequence boundaries of E: {:?} \n", Eseqs);
 
-    println!("---- Finished find_path_backward_group2() ----\n ");
+    //println!("---- Finished find_path_backward_group2() ----\n ");
 }
 
 

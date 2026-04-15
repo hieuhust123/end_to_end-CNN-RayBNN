@@ -24,7 +24,7 @@ use serde::Serialize;
 
 use nohash_hasher;
 
-use ndarray::Axis;
+use ndarray::{Axis, ShapeBuilder};
 
 use std::collections::HashMap;
 
@@ -1092,8 +1092,8 @@ fn test_network<'py>(
 		traj_size: u64,
 		max_epoch: u64,
 		model: Py<PyAny>,
-	) -> &'py PyArray4<f32> {
-		//PyResult<(Py<PyAny>, &'py PyArray4<f32>)>
+	) -> PyResult<(Py<PyAny>)> {
+		// Returns (Yhat)
 		arrayfire::set_backend(arrayfire::Backend::CUDA);
 		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
 
@@ -1107,7 +1107,6 @@ fn test_network<'py>(
 		let input_size: u64 = arch_search.neural_network.netdata.input_size.clone();
 		let output_size: u64 = arch_search.neural_network.netdata.output_size.clone();
 		let mut active_size: u64 = arch_search.neural_network.netdata.active_size.clone();
-		println!("trajectory size: {:?}", traj_size);
 
 		let traj_steps = traj_size + proc_num - 1;
 		let Z_dims = arrayfire::Dim4::new(&[neuron_size,batch_size,traj_steps,1]);
@@ -1159,14 +1158,14 @@ fn test_network<'py>(
 		let Dseqs = [arrayfire::Seq::new(Dstart as i32, Dend as i32, 1i32)];
 		let Eseqs = [arrayfire::Seq::new(Estart as i32, Eend as i32, 1i32)];
 		
-		//println!("Input X: {:?}", X);
-
 		// Get input array dimensions
 		let x_train_shape = x_train_py.shape().to_vec();
 		let y_train_shape = y_train_py.shape().to_vec();
-		println!("x_train_shape: {:?}", x_train_shape);
+		//println!("[FORWARD PyO3] Shape of CNN features received from Python side: {:?}", x_train_shape);
 		//println!("[Forward pass function PyO3] Input train X dims: {:?}", x_train_shape);
 		
+		// this is where error happen!!
+
 		// Initialize empty HashMaps for storing training data
 		let x_slices = x_train_shape[2];
 		let mut traindata_x: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
@@ -1175,16 +1174,17 @@ fn test_network<'py>(
 		// Convert PyO3 arrays to Rust ndarrays for processing
 		let x_input_ndarray = x_train_py.to_owned_array();
 		let y_input_ndarray = y_train_py.to_owned_array();
-		println!("x_input_ndarray shape: {:?}\n",x_input_ndarray.shape());
-		println!("y_input_ndarray shape: {:?}\n",y_input_ndarray.shape());
-		//println!("y_input_ndarray shape: {:?}\n",y_input_ndarray);
+		// println!("[FORWARD PyO3] CNN features converted to Rust Array: {:?}\n",x_input_ndarray.shape());
+		// println!("[FORWARD PyO3] One-hot labels converted to Rust Array: {:?}\n",y_input_ndarray.shape());
+		
 		// Print only shape and first few elements
 		let sample_data: Vec<f32> = y_input_ndarray.clone().into_iter().take(100).collect();
 		#[cfg(feature = "debug-output")]
 		println!("[Forward pass function PyO3] Input train Y first 50 elements in Rust ndarray: {:?}", sample_data);
 
 		let mut train_x_af =  arrayfire::constant::<f32>(0.0,temp_dims);
-		let train_x_dims = arrayfire::Dim4::new(&[input_size, batch_size, traj_size, 1]);
+		// FIX: use actual input slice count (traj_steps) instead of traj_size
+		let train_x_dims = arrayfire::Dim4::new(&[input_size, batch_size, x_train_shape[2] as u64, 1]);
 		let train_y_dims = arrayfire::Dim4::new(&[output_size,batch_size,traj_size,1]);
 		let mut train_y_af =  arrayfire::constant::<f32>(0.0,temp_dims);
 
@@ -1219,10 +1219,11 @@ fn test_network<'py>(
 		// Print only first few elements of ArrayFire array
 		//let sample_elements = arrayfire::index(&train_x_af, &[Seq::new(0.0, 9.0, 1.0), Seq::default(), Seq::default(), Seq::default()]);
 		//af_print!("[Forward pass function PyO3] Input arrayfire training first 10 elements: ", sample_elements);
-		let sample_elements = arrayfire::index(&train_y_af, &[Seq::new(0.0, 9.0, 1.0), Seq::default(), Seq::default(), Seq::default()]);
+		let sample_end = std::cmp::min(output_size, 10) - 1;
+		let sample_elements = arrayfire::index(&train_y_af, &[Seq::new(0.0, sample_end as f32, 1.0), Seq::default(), Seq::default(), Seq::default()]);
 		//af_print!("[Forward pass function PyO3] Output arrayfire training: ", sample_elements);
 		//println!("[Forward pass function PyO3] Output arrayfire training: {:?}", sample_elements.dims());
-		
+
 		raybnn::neural::network_f32::state_space_forward_batch(
 			&arch_search.neural_network.netdata,
 			&train_x_af,
@@ -1249,7 +1250,10 @@ fn test_network<'py>(
 		idxrs.set_index(&seq1, 1, None);
 		idxrs.set_index(&seq2, 2, None);
 		let Yhat = arrayfire::index_gen(&Q, idxrs);
-		
+
+		// Diagnostic loss call removed: softmax_cross_entropy assumes traj_size=1 (yidx
+		// becomes 3D when traj_size>1, causing af_lookup to fail with non-vector index).
+		// let loss_val = raybnn::optimal::loss_f32::softmax_cross_entropy(&Yhat, &train_y_af);
 
 		//host over here
 		let mut obj_Yhat : Vec<f32> = vec![0.0; Yhat.elements()];
@@ -1258,14 +1262,9 @@ fn test_network<'py>(
 		let (d0,d1,d2,d3) = (dims[0] as usize, 
 			dims[1] as usize,dims[2] as usize,dims[3] as usize);
 
-		let nd_array_Yhat = Array::from_shape_vec((d0,d1,d2,d3), obj_Yhat).unwrap();
+		let nd_array_Yhat = Array::from_shape_vec((d0,d1,d2,d3).f(), obj_Yhat).unwrap();
 		let nd_obj_Yhat = nd_array_Yhat.clone().into_pyarray(py);
-		
-		// nd_obj_Yhat is NumPy array
-		nd_obj_Yhat
-		//Ok((obj, nd_obj_Yhat))
-
-		
+		Ok((nd_obj_Yhat.to_object(py)))
 	}
 
 	fn loss_wrapper<'py>(
@@ -1290,7 +1289,6 @@ fn test_network<'py>(
 		let input_size: u64 = arch_search.neural_network.netdata.input_size.clone();
 		let output_size: u64 = arch_search.neural_network.netdata.output_size.clone();
 		let mut active_size: u64 = arch_search.neural_network.netdata.active_size.clone();
-		println!("trajectory size: {:?}", traj_size);
 
 		let traj_steps = traj_size + proc_num - 1;
 		let Z_dims = arrayfire::Dim4::new(&[neuron_size,batch_size,traj_steps,1]);
@@ -1357,7 +1355,7 @@ fn test_network<'py>(
 		// Convert PyO3 arrays to Rust ndarrays for processing
 		let x_input_ndarray = x_train_py.to_owned_array();
 		let y_input_ndarray = y_train_py.to_owned_array();
-		println!("x_input_ndarray shape: {:?}\n",x_input_ndarray.shape());
+		println!("Shape of Rust array converted training input from CNN side: {:?}\n",x_input_ndarray.shape());
 		println!("y_input_ndarray shape: {:?}\n",y_input_ndarray.shape());
 		//println!("y_input_ndarray shape: {:?}\n",y_input_ndarray);
 		// Print only shape and first few elements
@@ -1366,7 +1364,8 @@ fn test_network<'py>(
 		println!("[Forward pass function PyO3] Input train Y first 50 elements in Rust ndarray: {:?}", sample_data);
 
 		let mut train_x_af =  arrayfire::constant::<f32>(0.0,temp_dims);
-		let train_x_dims = arrayfire::Dim4::new(&[input_size, batch_size, traj_size, 1]);
+		// FIX: use actual input slice count (traj_steps) instead of traj_size
+		let train_x_dims = arrayfire::Dim4::new(&[input_size, batch_size, x_train_shape[2] as u64, 1]);
 		let train_y_dims = arrayfire::Dim4::new(&[output_size,batch_size,traj_size,1]);
 		let mut train_y_af =  arrayfire::constant::<f32>(0.0,temp_dims);
 
@@ -1403,10 +1402,11 @@ fn test_network<'py>(
 		// Print only first few elements of ArrayFire array
 		//let sample_elements = arrayfire::index(&train_x_af, &[Seq::new(0.0, 9.0, 1.0), Seq::default(), Seq::default(), Seq::default()]);
 		//af_print!("[Forward pass function PyO3] Input arrayfire training first 10 elements: ", sample_elements);
-		let sample_elements = arrayfire::index(&train_y_af, &[Seq::new(0.0, 9.0, 1.0), Seq::default(), Seq::default(), Seq::default()]);
+		let sample_end2 = std::cmp::min(output_size, 10) - 1;
+		let sample_elements = arrayfire::index(&train_y_af, &[Seq::new(0.0, sample_end2 as f32, 1.0), Seq::default(), Seq::default(), Seq::default()]);
 		//af_print!("[Forward pass function PyO3] Output arrayfire training: ", sample_elements);
 		//println!("[Forward pass function PyO3] Output arrayfire training: {:?}", sample_elements.dims());
-		
+
 
 		let Qslices: u64 = Q.dims()[2];
 
@@ -1441,8 +1441,6 @@ fn test_network<'py>(
 			&mut loss_val
 		);
 
-
-
 		//host over here
 		let mut obj_Yhat : Vec<f32> = vec![0.0; Yhat.elements()];
 		Yhat.host(&mut obj_Yhat);
@@ -1450,7 +1448,7 @@ fn test_network<'py>(
 		let (d0,d1,d2,d3) = (dims[0] as usize, 
 			dims[1] as usize,dims[2] as usize,dims[3] as usize);
 
-		let nd_array_Yhat = Array::from_shape_vec((d0,d1,d2,d3), obj_Yhat).unwrap();
+		let nd_array_Yhat = Array::from_shape_vec((d0,d1,d2,d3).f(), obj_Yhat).unwrap();
 		let nd_obj_Yhat = nd_array_Yhat.clone().into_pyarray(py);
 		
 		// nd_obj_Yhat is NumPy array
@@ -1464,15 +1462,16 @@ fn test_network<'py>(
 	fn state_space_backward_group2<'py>(
 		py: Python<'py>,
 		x_train_py: PyReadonlyArray4<'py, f32>,
-		// x_input_py: &'py PyArray4<f32>,
 		y_train_py: PyReadonlyArray4<'py, f32>,
 		traj_size: u64,
 		max_epoch: u64,
 		alpha0: f32,
 		model: Py<PyAny>,
 		i: u64,
-	) -> PyResult<(Py<PyAny>)> {
+	) -> PyResult<(Py<PyAny>, Py<PyAny>, Py<PyAny>, Py<PyAny>)> {
+		// Returns (dL_dX gradient, updated_params, adam_mt, adam_vt)
 		arrayfire::set_backend(arrayfire::Backend::CUDA);
+		let depythonize_arch = model.clone_ref(py);
 		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
 		let neuron_size: u64 = arch_search.neural_network.netdata.neuron_size.clone();
 		let input_size: u64 = arch_search.neural_network.netdata.input_size.clone();
@@ -1499,7 +1498,7 @@ fn test_network<'py>(
 		let mut mt = arrayfire::constant::<f32>(0.0,mt_dims);
 		let mut vt = arrayfire::constant::<f32>(0.0,mt_dims);
 		let mut grad = arrayfire::constant::<f32>(0.0,mt_dims);
-		let mut grad_input = arrayfire::constant::<f32>(0.0, X_dims);
+		let mut dL_dX = arrayfire::constant::<f32>(0.0, X_dims);
 		let mut grad_input2 = arrayfire::constant::<f32>(0.0, X_dims);
 
 		let WValuesdims0 = (arch_search).neural_network.WColIdx.dims()[0];
@@ -1566,17 +1565,20 @@ fn test_network<'py>(
 		let y_train_shape = y_train_py.shape().to_vec();
 
 		
+		
 		let x_slices = x_train_shape[2];
 		let mut traindata_x: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
 		let mut traindata_y: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
 		// Rust ndarray
 		let x_input_ndarray = x_train_py.to_owned_array();
 		let y_input_ndarray = y_train_py.to_owned_array();
+		
 		// Print only shape and first few elements
-		let sample_data: Vec<f32> = x_input_ndarray.clone().into_iter().take(50).collect();
+		//let sample_data: Vec<f32> = x_input_ndarray.clone().into_iter().take(50).collect();
 
 		let mut train_x_af =  arrayfire::constant::<f32>(0.0,temp_dims);
-		let train_x_dims = arrayfire::Dim4::new(&[input_size, batch_size, traj_size, 1]);
+		// FIX: use actual input slice count (traj_steps) instead of traj_size
+		let train_x_dims = arrayfire::Dim4::new(&[input_size, batch_size, x_train_shape[2] as u64, 1]);
 		let train_y_dims = arrayfire::Dim4::new(&[output_size,batch_size,traj_size,1]);
 		let mut train_y_af =  arrayfire::constant::<f32>(0.0,temp_dims);
 
@@ -1604,6 +1606,32 @@ fn test_network<'py>(
 		let epoch_num = traindata_x.len() as u64;
 		train_x_af = arrayfire::Array::new(&traindata_x[&batch_idx], train_x_dims);
 		train_y_af = arrayfire::Array::new(&traindata_y[&batch_idx], train_y_dims);
+
+		// Host network_params to CPU BEFORE forward/backward (they may corrupt the GPU array)
+		let param_count = arch_search.neural_network.network_params.elements();
+		let mut params_host: Vec<f32> = vec![0.0; param_count];
+		arch_search.neural_network.network_params.host(&mut params_host);
+		let params_dims = arch_search.neural_network.network_params.dims();
+		//println!("[DEBUG BACKWARD] params hosted BEFORE forward, count={}, dims={:?}", param_count, params_dims);
+
+		// FIX: Run forward pass to populate Z and Q with actual activations
+		// (Previously Z/Q were zero-initialized, causing Yhat=0 in backward)
+		raybnn::neural::network_f32::state_space_forward_batch(
+			&arch_search.neural_network.netdata,
+			&train_x_af,
+			&arch_search.neural_network.WRowIdxCSR,
+			&mut arch_search.neural_network.WColIdx,
+			&Wseqs,
+			&Hseqs,
+			&Aseqs,
+			&Bseqs,
+			&Cseqs,
+			&Dseqs,
+			&Eseqs,
+			&arch_search.neural_network.network_params,
+			&mut Z,
+			&mut Q,
+		);
 
 		raybnn::graph::path_f32::find_path_backward_group2(
 			&arch_search.neural_network.netdata,
@@ -1656,7 +1684,7 @@ fn test_network<'py>(
 			&mut Eseqs,
 		);
 
-		raybnn::neural::network_f32::state_space_backward_group2(
+			raybnn::neural::network_f32::state_space_backward_group2(
 			&arch_search.neural_network.netdata,
 			&train_x_af,
 			&arch_search.neural_network.network_params,
@@ -1669,10 +1697,10 @@ fn test_network<'py>(
 			
 			&mut idxsel_out,
 			&mut valsel_out,
-
+			
 			&mut cvec_out,
 			&mut dXsel_out,
-
+		
 			&mut nrows_out,
 			&mut sparseval_out,
 			&mut sparserow_out,
@@ -1693,50 +1721,52 @@ fn test_network<'py>(
 			&mut dEseqs_out,
 
 			&mut grad,
-			&mut grad_input,
+			&mut dL_dX,
 			&mut grad_input2
 		);
 
-		//let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
-		shuffle_weights(
-			i,
-			&mut arch_search
-		);
+		// DEFERRED WEIGHT UPDATE FIX: Do NOT update BNN weights here.
+		// Return raw gradient + dL_dX so Python can update BNN weights
+		// AFTER CNN optimizer.step(), preventing the "moving target" problem.
 
+		// Negate grad (same as autotrain_f32.rs line 636: grad = -1.0*grad)
+		grad = -1.0f32 * grad;
 
-		adam(
-			0.9,
-			0.999,
-			&mut grad,
-			&mut mt,
-			&mut vt,
-		);
+		// Host grad (negated parameter gradients) to CPU
+		let grad_count = grad.elements();
+		let mut grad_host: Vec<f32> = vec![0.0; grad_count];
+		grad.host(&mut grad_host);
 
-		arch_search.neural_network.network_params = arch_search.neural_network.network_params + (alpha0* -grad.clone());
+		// Host dL_dX (input gradients back to CNN) to CPU
+		let dlx_count = dL_dX.elements();
+		let dlx_dims = dL_dX.dims();
+		let mut grad_input_back_to_cnn: Vec<f32> = vec![0.0; dlx_count];
+		dL_dX.host(&mut grad_input_back_to_cnn);
+		//println!("[DEBUG BACKWARD] dL_dX hosted, count={}, dims={:?}", dlx_count, dlx_dims);
 
-		//host over here
-		let mut grad_input_back_to_cnn : Vec<f32> = vec![0.0; grad_input.elements()];
-		grad_input.host(&mut grad_input_back_to_cnn);
-		let dims = grad_input.dims();
-		let (d0,d1,d2,d3) = (dims[0] as usize, 
-			dims[1] as usize,dims[2] as usize,dims[3] as usize);
+		// Build numpy arrays from CPU data
+		let (d0, d1, d2, d3) = (dlx_dims[0] as usize, dlx_dims[1] as usize,
+			dlx_dims[2] as usize, dlx_dims[3] as usize);
+		let nd_array_grad_input = Array::from_shape_vec((d0, d1, d2, d3).f(), grad_input_back_to_cnn).unwrap();
+		let nd_obj_grad_input = nd_array_grad_input.into_pyarray(py);
 
-		let nd_array_grad_input = Array::from_shape_vec((d0,d1,d2,d3), grad_input_back_to_cnn).unwrap();
-		let nd_obj_grad_input = nd_array_grad_input.clone().into_pyarray(py);
+		// Return raw negated grad as 1D numpy array (for Python-side Adam + weight update)
+		let py_grad = numpy::PyArray1::from_vec(py, grad_host).to_object(py);
 
+		// Return current params (unchanged) so Python knows the base to update from
+		let nd_params = Array::from_shape_vec(
+			(params_dims[0] as usize, params_dims[1] as usize, params_dims[2] as usize, params_dims[3] as usize).f(),
+			params_host
+		).unwrap();
+		let py_params = nd_params.into_pyarray(py).to_object(py);
 
-		// let mut grad_input_back_to_cnn : Vec<f32> = vec![0.0; grad_input2.elements()];
-		// grad_input2.host(&mut grad_input_back_to_cnn);
-		// let dims = grad_input2.dims();
-		// let (d0,d1,d2,d3) = (dims[0] as usize, 
-		// 	dims[1] as usize,dims[2] as usize,dims[3] as usize);
+		// Return (dL_dX, raw_negated_grad, current_params, dummy)
+		// 2nd element changed from updated_params → raw negated BNN gradient
+		// 3rd element is current params (unchanged)
+		// 4th element is placeholder for API compatibility
+		let py_dummy = numpy::PyArray1::from_vec(py, vec![0.0f32; 1]).to_object(py);
 
-		// let nd_array_grad_input = Array::from_shape_vec((d0,d1,d2,d3), grad_input_back_to_cnn).unwrap();
-		// let nd_obj_grad_input = nd_array_grad_input.clone().into_pyarray(py);
-
-		
-		// Return both grad_input and updated arch_search
-		Ok((nd_obj_grad_input.to_object(py)))
+		Ok((nd_obj_grad_input.to_object(py), py_grad, py_params, py_dummy))
 		
 	}
 	Ok(())
