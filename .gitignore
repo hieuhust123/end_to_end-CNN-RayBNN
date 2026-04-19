@@ -1,20 +1,50 @@
-# System Files
-.DS_Store
-Thumbs.db
+Rust_Code/target/
+Rust_Code/Cargo.lock
 
-# Python
-__pycache__/
+# Magic files
+magic/
+
+# Compressed files
+*.zip
+*.tar.gz
+*.csv
+data/
+datasets/
+
+# Python artifacts
+*.pkl
+Python_Code/__pycache__
+*.txt
 *.pyc
-.venv/
-venv/
+*.pyo
+*.pyd
+__pycache__/
+.ipynb_checkpoints/
 
-# Large Data / Research Artifacts (Adjust based on your MWT dataset)
-*.mat
+# OR strictly these specific files:
+# Python_Code/test.txt
+# Python_Code/output_raybnn_training_with_cnn_features.txt
+
+# Large ML/data files 
 *.npy
 *.npz
-*.log
+*.pt
+*.pth
+*.h5
+*.bin
+*.ckpt
+*.safetensors
 
-# VS Code
-.vscode/
+# Temporary files
+/tmp/
 
-mwt_eeg
+# Virtual environment
+venv/
+.venv/
+.env/
+
+# System and IDE Files
+__pycache__/
+.DS_Store
+.vscode/CNN+RayBNN/
+*.mat

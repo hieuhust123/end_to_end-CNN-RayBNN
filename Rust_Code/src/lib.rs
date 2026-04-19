@@ -1,0 +1,1777 @@
+// We need to link `blas_src` directly, c.f. https://github.com/rust-ndarray/ndarray#how-to-enable-blas-integration
+extern crate blas_src;
+
+use numpy::{self, IntoPyArray, PyArrayDyn, ToPyArray};
+use numpy::ndarray::{Zip, Array, Ix2};
+use numpy::{PyReadonlyArray3, PyArray4, PyArray2, PyArray1, PyReadonlyArray4, PyReadonlyArray2, PyArray, PyReadonlyArray1};
+use pyo3::{pymodule, types::PyModule, PyResult, Python, PyObject, PyAny, Py};
+use pyo3::prelude::*;
+use pyo3::IntoPy;
+use pyo3::types::IntoPyDict;
+use crate::arrayfire::af_print;
+use numpy::npyffi::NPY_ORDER::NPY_FORTRANORDER;
+use crate::arrayfire::Seq;
+use crate::raybnn::optimal::gd_f32::adam;
+use crate::raybnn::interface::autotransfer_f32::shuffle_weights;
+
+
+
+use arrayfire;
+use raybnn;
+
+use pythonize::{depythonize, pythonize};
+use serde::Serialize;
+
+use nohash_hasher;
+
+use ndarray::{Axis, ShapeBuilder};
+
+use std::collections::HashMap;
+
+// #[derive(Clone)]
+// struct TrainingResult {
+//     model: raybnn::interface::automatic_f32::arch_search_type,
+//     loss_history: Vec<f32>,
+// }
+
+/* A struct can be created to form return values of forward pass
+and backward pass
+*/
+// Example:
+// #[pyclass]
+// //#[derive(Serialize)]
+// #[derive(Debug, Clone)]
+// struct Results {
+// #[pyo3(get)]
+// pub arch_search_result : Py<PyAny>,
+// #[pyo3(get)]
+// pub Z_result: Py<PyAny>,
+// #[pyo3(get)]
+// pub Q_result: Py<PyAny>,
+// }
+	// #[pyclass]
+	// struct Adam_optimizer_params {
+	// 	mt: raybnn::
+	// }
+
+
+
+fn sigmoid_loss(
+	yhat: &arrayfire::Array<f32>,
+	y: &arrayfire::Array<f32>) -> f32
+{ 
+	raybnn::optimal::loss_f32::weighted_sigmoid_cross_entropy(yhat, y, 5.0) 
+}
+
+
+
+
+fn sigmoid_loss_grad(
+	yhat: &arrayfire::Array<f32>,
+	y: &arrayfire::Array<f32>) -> arrayfire::Array<f32> 
+{ 
+	raybnn::optimal::loss_f32::weighted_sigmoid_cross_entropy_grad(yhat, y, 5.0) 
+}
+fn precision_recall_f1_MCC_multi(
+	yhat: &arrayfire::Array<u32>,
+	y: &arrayfire::Array<u32>,
+	weights: &arrayfire::Array<f32>,
+	label_num: u64) -> arrayfire::Array<f32>
+{
+	raybnn::optimal::measure_f32::precision_recall_f1_MCC_multi(yhat, y, weights, label_num)
+}
+// fn softmax_loss(
+// 	yhat: &arrayfire::Array<f32>,
+// 	y: &arrayfire::Array<f32>
+// ) -> f32 {
+// 	raybnn::optimal::loss_f32::softmax_cross_entropy(yhat,y)
+// }
+
+// fn softmax_loss_grad(
+// 	yhat: &arrayfire::Array<f32>,
+// 	y: &arrayfire::Array<f32>
+// ) -> arrayfire::Array<f32> {
+// 	raybnn::optimal::loss_f32::softmax_cross_entropy_grad(yhat, y)
+// }
+
+
+const LARGE_POS_NUM_f32: f32 = 1.0e9;
+
+
+#[pymodule]
+fn raybnn_python<'py>(_py: Python<'py>, m: &'py PyModule) -> PyResult<()> {
+
+	#[pyfn(m)]
+	fn compute_metric<'py>(
+		py: Python<'py>,
+		pred: PyReadonlyArray4<'py, f32>,
+		true_labels: PyReadonlyArray4<'py, f32>,
+		label_num: u64,
+		weights: Option<PyReadonlyArray1<'py, f32>>
+	) -> PyResult <Py<PyAny>> {
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+
+		// Convert to Rust arrays
+		let pred_array = pred.to_owned_array();
+		let true_labels_array = true_labels.to_owned_array();
+
+		let pred_dims = pred_array.shape();
+		let true_labels_dims = true_labels_array.shape();
+
+		// Get dims
+		let output_size = pred_dims[0] as usize;
+		let batch_size = pred_dims[1] as usize;
+    	let num_samples = pred_dims[3] as usize;
+
+		// Convert pred from argmax to get class indices
+		let mut yhat = Vec::new();
+		let mut y = Vec::new();
+
+		// Process each sample
+		for sample_idx in 0..num_samples {
+			for batch_idx in 0..batch_size {
+
+				// Find predicted class (argmax)
+				let mut max_val = f32::NEG_INFINITY;
+				let mut pred_class = 0u32;
+
+				for class_idx in 0..output_size{
+					let val = pred_array[[class_idx, batch_idx, 0, sample_idx]];
+					if val > max_val {
+						max_val = val;
+						pred_class = class_idx as u32;
+					}
+				}
+				yhat.push(pred_class);
+
+				// Find true class (which one-hot position is 1.0)
+				let mut true_class = 0u32;
+				for class_idx in 0..output_size {
+					let val = true_labels_array[[class_idx, batch_idx, 0, sample_idx]];
+					if val > 0.5 {
+						true_class = class_idx as u32;
+						break;
+					}
+				}
+				y.push(true_class);
+			}
+		}
+
+		// Compute or use provided weights
+		let weights_vec: Vec<f32> = if let Some(weights_ref) = weights {
+			// Use provided weights
+			weights_ref.to_vec().unwrap()
+		} else {
+			// Compute weights from class frequencies
+			let mut class_counts = vec![0u32; label_num as usize];
+			for &label in &y {
+				if (label as u64) < label_num {
+					class_counts[label as usize] += 1;
+				}
+			}
+			let total: f32 = class_counts.iter().sum::<u32>() as f32;
+			if total > 0.0 {
+				class_counts.iter().map(|&c| c as f32 / total).collect()
+			} else {
+				vec![1.0 / label_num as f32; label_num as usize]
+			}
+		};
+
+		// Convert to ArrayFire arrays
+		let yhat_af = arrayfire::Array::new(&yhat, arrayfire::Dim4::new(&[yhat.len() as u64, 1, 1, 1]));
+		let y_af = arrayfire::Array::new(&y, arrayfire::Dim4::new(&[y.len() as u64, 1, 1, 1]));
+		let weights_af = arrayfire::Array::new(&weights_vec, arrayfire::Dim4::new(&[weights_vec.len() as u64, 1, 1, 1]));
+		
+		// Compute metrics
+		let metrics = precision_recall_f1_MCC_multi(&yhat_af, &y_af, &weights_af, label_num);
+		
+		// Convert to Python array
+		let mut metrics_cpu = vec![0.0f32; metrics.elements()];
+		metrics.host(&mut metrics_cpu);
+		
+		let metrics_arr = PyArray1::<f32>::from_vec(py, metrics_cpu);
+		
+		Ok(metrics_arr.to_object(py))
+	}
+
+
+
+	#[pyfn(m)]
+    fn print_model_info<'py>(
+        py: Python<'py>,
+		model: Py<PyAny>
+    ) {
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+
+		let arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
+
+		raybnn::neural::network_f32::print_netdata(&arch_search.neural_network.netdata);
+
+		println!("WValues.dims()[0]: {}",arch_search.neural_network.WColIdx.dims()[0]);
+	}
+
+
+	#[pyfn(m)]
+    fn add_neuron_to_existing3<'py>(
+        py: Python<'py>,
+
+		new_active_size: u64,
+		init_connection_num: u64,
+		input_neuron_con_rad: f32,
+		hidden_neuron_con_rad: f32,
+		output_neuron_con_rad: f32,
+
+		model: Py<PyAny>
+    ) -> Py<PyAny>{
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+
+		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
+
+
+		//Add 30 neurons to existing neural network
+		//Raytrace radius of 40 neuron radius
+		let add_neuron_options: raybnn::physics::update_f32::add_neuron_option_type = raybnn::physics::update_f32::add_neuron_option_type {
+			new_active_size: new_active_size,
+			init_connection_num: init_connection_num,
+			input_neuron_con_rad: input_neuron_con_rad,
+			hidden_neuron_con_rad: hidden_neuron_con_rad,
+			output_neuron_con_rad: output_neuron_con_rad,
+		};
+
+		//Add 30 neurons to existing neural network
+		raybnn::physics::update_f32::add_neuron_to_existing3(
+			&add_neuron_options,
+			&mut arch_search,
+		);
+
+
+		let obj = pythonize(py, &arch_search).unwrap();
+
+		obj
+	}
+
+
+
+
+	#[pyfn(m)]
+    fn select_forward_sphere<'py>(
+        py: Python<'py>,
+
+
+		model: Py<PyAny>
+    ) -> Py<PyAny>{
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+
+		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
+
+		let mut WRowIdxCOO = raybnn::graph::large_sparse_i32::CSR_to_COO(&arch_search.neural_network.WRowIdxCSR);
+
+
+
+
+
+
+		let WValuesdims0 =  (arch_search).neural_network.WColIdx.dims()[0];
+
+		let network_paramsdims0 =  (arch_search).neural_network.network_params.dims()[0];
+	
+		let Hdims0 =  (network_paramsdims0 -  WValuesdims0)/6; 
+	
+	
+	
+		let Wstart = 0;
+		let Wend = (WValuesdims0  as i64) - 1;
+	
+		let Hstart = Wend + 1; 
+		let Hend = Hstart + (Hdims0 as i64) - 1;
+	
+		let Astart = Hend + 1; 
+		let Aend = Astart + (Hdims0 as i64) - 1;
+	
+		let Bstart = Aend + 1; 
+		let Bend = Bstart + (Hdims0 as i64) - 1;
+	
+		let Cstart = Bend + 1; 
+		let Cend = Cstart + (Hdims0 as i64) - 1;
+	
+		let Dstart = Cend + 1; 
+		let Dend = Dstart + (Hdims0 as i64) - 1;
+	
+		let Estart = Dend + 1; 
+		let Eend = Estart + (Hdims0 as i64) - 1;
+	
+	
+		let Wseqs = [arrayfire::Seq::new(Wstart as i32, Wend as i32, 1i32)];
+		let Hseqs = [arrayfire::Seq::new(Hstart as i32, Hend as i32, 1i32)];
+		let Aseqs = [arrayfire::Seq::new(Astart as i32, Aend as i32, 1i32)];
+		let Bseqs = [arrayfire::Seq::new(Bstart as i32, Bend as i32, 1i32)];
+		let Cseqs = [arrayfire::Seq::new(Cstart as i32, Cend as i32, 1i32)];
+		let Dseqs = [arrayfire::Seq::new(Dstart as i32, Dend as i32, 1i32)];
+		let Eseqs = [arrayfire::Seq::new(Estart as i32, Eend as i32, 1i32)];
+	
+		
+	
+		let mut WValues = arrayfire::index(&((arch_search).neural_network.network_params), &Wseqs);
+		let H = arrayfire::index(&((arch_search).neural_network.network_params), &Hseqs);
+		let A = arrayfire::index(&((arch_search).neural_network.network_params), &Aseqs);
+		let B = arrayfire::index(&((arch_search).neural_network.network_params), &Bseqs);
+		let C = arrayfire::index(&((arch_search).neural_network.network_params), &Cseqs);
+		let D = arrayfire::index(&((arch_search).neural_network.network_params), &Dseqs);
+		let E = arrayfire::index(&((arch_search).neural_network.network_params), &Eseqs);
+	
+	
+
+
+
+
+
+
+		raybnn::graph::adjacency_f32::select_forward_sphere(
+			&arch_search.neural_network.netdata, 
+			&mut WValues, 
+			&mut WRowIdxCOO, 
+			&mut arch_search.neural_network.WColIdx, 
+			&arch_search.neural_network.neuron_pos, 
+			&arch_search.neural_network.neuron_idx
+		);
+
+		arch_search.neural_network.WRowIdxCSR = raybnn::graph::large_sparse_i32::COO_to_CSR(&WRowIdxCOO,arch_search.neural_network.netdata.neuron_size);
+
+
+
+
+
+
+		let total_param_size = WValues.dims()[0]  +  H.dims()[0]  +  A.dims()[0]    +  B.dims()[0]    +  C.dims()[0]    +  D.dims()[0]   +  E.dims()[0]  ;
+		let network_params_dims = arrayfire::Dim4::new(&[total_param_size,1,1,1]);
+	
+		let Wstart = 0;
+		let Wend = (WValues.dims()[0]  as i64) - 1;
+	
+		let Hstart = Wend + 1; 
+		let Hend = Hstart + (H.dims()[0] as i64) - 1;
+	
+		let Astart = Hend + 1; 
+		let Aend = Astart + (A.dims()[0] as i64) - 1;
+	
+		let Bstart = Aend + 1; 
+		let Bend = Bstart + (B.dims()[0] as i64) - 1;
+	
+		let Cstart = Bend + 1; 
+		let Cend = Cstart + (C.dims()[0] as i64) - 1;
+	
+		let Dstart = Cend + 1; 
+		let Dend = Dstart + (D.dims()[0] as i64) - 1;
+	
+		let Estart = Dend + 1; 
+		let Eend = Estart + (E.dims()[0] as i64) - 1;
+	
+	
+		let Wseqs = [arrayfire::Seq::new(Wstart as i32, Wend as i32, 1i32)];
+		let Hseqs = [arrayfire::Seq::new(Hstart as i32, Hend as i32, 1i32)];
+		let Aseqs = [arrayfire::Seq::new(Astart as i32, Aend as i32, 1i32)];
+		let Bseqs = [arrayfire::Seq::new(Bstart as i32, Bend as i32, 1i32)];
+		let Cseqs = [arrayfire::Seq::new(Cstart as i32, Cend as i32, 1i32)];
+		let Dseqs = [arrayfire::Seq::new(Dstart as i32, Dend as i32, 1i32)];
+		let Eseqs = [arrayfire::Seq::new(Estart as i32, Eend as i32, 1i32)];
+	
+	
+		(arch_search).neural_network.network_params = arrayfire::constant::<f32>(0.0,network_params_dims);
+		arrayfire::assign_seq(&mut ((arch_search).neural_network.network_params), &Wseqs, &WValues);
+		arrayfire::assign_seq(&mut ((arch_search).neural_network.network_params), &Hseqs, &H);
+		arrayfire::assign_seq(&mut ((arch_search).neural_network.network_params), &Aseqs, &A);
+		arrayfire::assign_seq(&mut ((arch_search).neural_network.network_params), &Bseqs, &B);
+		arrayfire::assign_seq(&mut ((arch_search).neural_network.network_params), &Cseqs, &C);
+		arrayfire::assign_seq(&mut ((arch_search).neural_network.network_params), &Dseqs, &D);	
+		arrayfire::assign_seq(&mut ((arch_search).neural_network.network_params), &Eseqs, &E);	
+	
+	
+	
+		(arch_search).neural_network.netdata.active_size = (arch_search).neural_network.neuron_idx.dims()[0];
+	
+
+
+
+
+		let obj = pythonize(py, &arch_search).unwrap();
+
+		obj
+	}
+
+
+
+	#[pyfn(m)]
+    fn create_start_archtecture<'py>(
+        py: Python<'py>,
+		input_size: u64,
+		max_input_size: u64,
+
+		output_size: u64,
+		max_output_size: u64,
+
+		active_size: u64,
+		max_neuron_size: u64,
+
+		batch_size: u64,
+		traj_size: u64,
+
+		proc_num: u64,
+
+		directory_path:  String
+    ) -> Py<PyAny> {
+
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+
+		let dir_path = directory_path.clone();
+
+		let mut arch_search = raybnn::interface::automatic_f32::create_start_archtecture2(
+
+			input_size,
+			max_input_size,
+
+			output_size,
+			max_output_size,
+
+			active_size,
+			max_neuron_size,
+
+			batch_size,
+			traj_size,
+
+			proc_num,
+
+			&dir_path
+		);
+
+		let obj = pythonize(py, &arch_search).unwrap();
+
+		obj
+	}
+
+
+
+
+	#[pyfn(m)]
+    fn train_network<'py>(
+        py: Python<'py>,
+
+		train_x: PyReadonlyArray4<'py, f32>,
+        train_y: PyReadonlyArray4<'py, f32>,
+
+		crossval_x: PyReadonlyArray4<'py, f32>,
+        crossval_y: PyReadonlyArray4<'py, f32>,
+
+		stop_strategy_input: String,
+		lr_strategy_input: String,
+		lr_strategy2_input: String,
+
+		loss_function: String,
+
+		max_epoch: u64,
+		stop_epoch: u64,
+		stop_train_loss: f32,
+
+		max_alpha: f32,
+
+		exit_counter_threshold: u64,
+		shuffle_counter_threshold: u64,
+
+		model: Py<PyAny>
+    ) -> Py<PyAny> {
+
+		let mut stop_stategy = raybnn::interface::autotrain_f32::stop_strategy_type::NONE;
+
+		if stop_strategy_input == "NONE"
+		{
+			stop_stategy = raybnn::interface::autotrain_f32::stop_strategy_type::NONE;
+		}
+		else if stop_strategy_input == "STOP_AT_EPOCH"
+		{
+			stop_stategy = raybnn::interface::autotrain_f32::stop_strategy_type::STOP_AT_EPOCH;
+		}
+		else if stop_strategy_input == "STOP_AT_TRAIN_LOSS"
+		{
+			stop_stategy = raybnn::interface::autotrain_f32::stop_strategy_type::STOP_AT_TRAIN_LOSS;
+		}
+		else if stop_strategy_input == "CROSSVAL_STOPPING"
+		{
+			stop_stategy = raybnn::interface::autotrain_f32::stop_strategy_type::CROSSVAL_STOPPING;
+		}
+
+
+
+
+		let mut lr_strategy = raybnn::interface::autotrain_f32::lr_strategy_type::NONE;
+
+		if lr_strategy_input == "NONE"
+		{
+			lr_strategy = raybnn::interface::autotrain_f32::lr_strategy_type::NONE;
+		}
+		else if lr_strategy_input == "COSINE_ANNEALING"
+		{
+			lr_strategy = raybnn::interface::autotrain_f32::lr_strategy_type::COSINE_ANNEALING;
+		}
+		else if lr_strategy_input == "SHUFFLE_CONNECTIONS"
+		{
+			lr_strategy = raybnn::interface::autotrain_f32::lr_strategy_type::SHUFFLE_CONNECTIONS;
+		}
+
+
+		let mut lr_strategy2 = raybnn::interface::autotrain_f32::lr_strategy2_type::BTLS_ALPHA;
+
+		if lr_strategy2_input == "BTLS_ALPHA"
+		{
+			lr_strategy2 = raybnn::interface::autotrain_f32::lr_strategy2_type::BTLS_ALPHA;
+		}
+		else if lr_strategy2_input == "MAX_ALPHA"
+		{
+			lr_strategy2 = raybnn::interface::autotrain_f32::lr_strategy2_type::MAX_ALPHA;
+		}
+
+
+
+
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+
+		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
+
+		//Train Options
+		let train_stop_options = raybnn::interface::autotrain_f32::train_network_options_type {
+			stop_strategy: stop_stategy,
+			lr_strategy: lr_strategy,
+			lr_strategy2: lr_strategy2,
+
+			max_epoch: max_epoch,
+			stop_epoch: stop_epoch,
+			stop_train_loss: stop_train_loss,
+
+			exit_counter_threshold: exit_counter_threshold,
+			shuffle_counter_threshold: shuffle_counter_threshold,
+		};
+
+
+		let mut alpha_max_vec = vec![max_alpha; 1000];
+		let mut loss_vec = Vec::new();
+		let mut crossval_vec = Vec::new();
+		let mut loss_status = raybnn::interface::autotrain_f32::loss_status_type::LOSS_OVERFLOW;
+
+		println!("Start training");
+
+		arrayfire::device_gc();
+
+
+
+
+
+		let train_x_dims = train_x.shape().clone().to_vec();
+		//#[cfg(feature = "debug-output")]
+		
+		let train_y_dims = train_y.shape().clone().to_vec();
+
+		let crossval_x_dims = crossval_x.shape().clone().to_vec();
+		let crossval_y_dims = crossval_y.shape().clone().to_vec();
+
+		let mut traindata_X: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+		let mut traindata_Y: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+
+		let mut validationdata_X: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+		let mut validationdata_Y: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+
+
+		let train_x = train_x.to_owned_array();
+		println!("[TRAIN_NETWORK_lib.rs] Input train X dims: {:?}", train_x_dims);
+		//println!("[TRAIN_NETWORK_lib.rs] Input train X dims: {:?}", train_x.shape());
+		// Print only shape and first few elements
+		let sample_data: Vec<f32> = train_x.clone().into_iter().take(50).collect();
+		println!("[TRAIN_NETWORK_lib.rs] Input train X first 50 elements in Rust ndarray: {:?}", sample_data);
+		
+		let train_y = train_y.to_owned_array() ;
+
+		let crossval_x = crossval_x.to_owned_array() ;
+		let crossval_y = crossval_y.to_owned_array() ;
+
+
+		let Xslices = train_x_dims[2];
+
+
+		for traj in 0..train_x_dims[3]
+		{
+
+
+			let train_x_dims = train_x.shape().clone().to_vec();
+			let train_y_dims = train_y.shape().clone().to_vec();
+
+			let mut X = Vec::new();
+			let mut Y = Vec::new();
+			if Xslices > 1
+			{
+				X = train_x.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([train_x_dims[0],train_x_dims[2],train_x_dims[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+				Y = train_y.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([train_y_dims[0],train_y_dims[2],train_y_dims[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();	
+			}
+			else
+			{
+				X = train_x.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([train_x_dims[1],train_x_dims[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+				Y = train_y.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([train_y_dims[1],train_y_dims[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();	
+			}
+
+
+
+
+			traindata_X.insert(traj as u64, X);
+			traindata_Y.insert(traj as u64, Y);
+		}
+		// Print HashMap summary instead of full content
+		println!("[TRAIN_NETWORK_lib.rs] Input train X HashMap size: {}", traindata_X.len());
+		if let Some(first_traj) = traindata_X.get(&0) {
+			let sample_size = std::cmp::min(10, first_traj.len());
+			println!("[TRAIN_NETWORK_lib.rs] First trajectory (traj=0) first {} elements: {:?}", sample_size, &first_traj[0..sample_size]);
+		}
+		if let Some(last_traj) = traindata_X.get(&(traindata_X.len() as u64 - 1)) {
+			let sample_size = std::cmp::min(10, last_traj.len());
+			println!("[TRAIN_NETWORK_lib.rs] Last trajectory (traj={}) first {} elements: {:?}", traindata_X.len()-1, sample_size, &last_traj[0..sample_size]);
+		}
+		for traj in 0..crossval_x_dims[3]
+		{
+			let crossval_x_dims = crossval_x.shape().clone().to_vec();
+			let crossval_y_dims = crossval_y.shape().clone().to_vec();
+
+			let mut X = Vec::new();
+			let mut Y = Vec::new();
+			if Xslices > 1
+			{
+				X = crossval_x.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([crossval_x_dims[0],crossval_x_dims[2],crossval_x_dims[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+				Y = crossval_y.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([crossval_y_dims[0],crossval_y_dims[2],crossval_y_dims[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+			}
+			else 
+			{
+				X = crossval_x.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([crossval_x_dims[1],crossval_x_dims[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+				Y = crossval_y.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([crossval_y_dims[1],crossval_y_dims[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+			}
+
+
+			validationdata_X.insert(traj as u64, X);
+			validationdata_Y.insert(traj as u64, Y);
+		}
+
+		// // ADD THESE PRINT STATEMENTS TO SHOW FINAL PROCESSED DATA:
+		println!("traindata_X HashMap created with {} trajectories", traindata_X.len());
+		// println!("First trajectory data length: {:?}", traindata_X.get(&0).map(|v| v.len()));
+		
+		// // Show sample of first trajectory data (first 10 elements)
+		// if let Some(first_traj) = traindata_X.get(&0) {
+		// 	let sample_size = std::cmp::min(10, first_traj.len());
+		// 	println!("First trajectory sample data: {:?}", &first_traj[0..sample_size]);
+		// }
+
+		if loss_function == "MSE"
+		{
+			//Train network, stop at lowest crossval
+			raybnn::interface::autotrain_f32::train_network(
+				&traindata_X,
+				&traindata_Y,
+
+				&validationdata_X,
+				&validationdata_Y,
+
+				raybnn::optimal::loss_f32::MSE,
+				raybnn::optimal::loss_f32::MSE_grad,
+
+				train_stop_options,
+
+				&mut alpha_max_vec,
+				&mut loss_vec,
+				&mut crossval_vec,
+				&mut arch_search,
+				&mut loss_status
+			);
+		}
+		else if loss_function == "softmax_cross_entropy"
+		{
+			raybnn::interface::autotrain_f32::train_network(
+				&traindata_X,
+				&traindata_Y,
+
+				&validationdata_X,
+				&validationdata_Y,
+
+				raybnn::optimal::loss_f32::softmax_cross_entropy,
+				raybnn::optimal::loss_f32::softmax_cross_entropy_grad,
+
+				train_stop_options,
+
+				&mut alpha_max_vec,
+				&mut loss_vec,
+				&mut crossval_vec,
+				&mut arch_search,
+				&mut loss_status
+			);
+		}
+		else if loss_function == "sigmoid_cross_entropy"
+		{
+			raybnn::interface::autotrain_f32::train_network(
+				&traindata_X,
+				&traindata_Y,
+
+				&validationdata_X,
+				&validationdata_Y,
+
+				raybnn::optimal::loss_f32::sigmoid_cross_entropy,
+				raybnn::optimal::loss_f32::sigmoid_cross_entropy_grad,
+
+				train_stop_options,
+
+				&mut alpha_max_vec,
+				&mut loss_vec,
+				&mut crossval_vec,
+				&mut arch_search,
+				&mut loss_status
+			);
+		}
+		else if loss_function == "sigmoid_cross_entropy_5"
+		{
+			raybnn::interface::autotrain_f32::train_network(
+				&traindata_X,
+				&traindata_Y,
+
+				&validationdata_X,
+				&validationdata_Y,
+
+				sigmoid_loss,
+				sigmoid_loss_grad,
+
+				train_stop_options,
+
+				&mut alpha_max_vec,
+				&mut loss_vec,
+				&mut crossval_vec,
+				&mut arch_search,
+				&mut loss_status
+			);
+		}
+
+		let obj = pythonize(py, &arch_search).unwrap();
+
+		obj
+	}
+
+
+
+#[pyfn(m)]
+fn test_network<'py>(
+        py: Python<'py>,
+
+		test_x: PyReadonlyArray4<'py, f32>,
+
+
+		model: Py<PyAny>
+    ) -> &'py PyArray4<f32>   {
+
+
+
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+		arrayfire::device_gc();
+
+		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
+
+
+		let test_x_dims = test_x.shape().clone().to_vec();
+
+
+		let mut validationdata_X: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+
+
+		let test_x = test_x.to_owned_array() ;
+
+
+		let Xslices = test_x_dims[2];
+
+		
+		for traj in 0..test_x_dims[3]
+		{
+			let test_x_dims = test_x.shape().clone().to_vec();
+
+			let mut X = Vec::new();
+
+			if Xslices > 1
+			{
+				X = test_x.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_x_dims[0],test_x_dims[2],test_x_dims[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+			}
+			else 
+			{
+				X = test_x.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_x_dims[1],test_x_dims[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+			}
+
+
+			validationdata_X.insert(traj as u64, X);
+			
+		}
+
+		
+		let mut Yhat_out = nohash_hasher::IntMap::default();
+		
+
+		//Train network, stop at lowest crossval
+		raybnn::interface::autotest_f32::test_network(
+			&mut validationdata_X,
+
+			&mut arch_search, 
+
+			&mut Yhat_out, 
+		);
+
+		/* 
+		arrayfire::set_seed(0);
+		let Yhat_dims = arrayfire::Dim4::new(&[2, 3, 5, 7]);
+		let Yhat_arr = arrayfire::randu::<f32>(Yhat_dims);
+
+		arrayfire::print_gen("Yhat_arr".to_string(), &Yhat_arr,Some(6));
+
+		let mut Yhat_vec = vec!(f32::default();Yhat_arr.elements());
+		Yhat_arr.host(&mut Yhat_vec);
+		*/
+
+		let arr = unsafe {
+
+			let dim0 = arch_search.neural_network.netdata.output_size as usize;
+			let dim1 = test_x_dims[1] as usize;
+			let dim2 = test_x_dims[2] as usize;
+			let dim3 = test_x_dims[3] as usize;
+
+			let arr = PyArray4::<f32>::new(py, [dim0, dim1, dim2, dim3], true);
+
+
+			for l in 0..dim3
+			{
+				let idx = l as u64;
+				let Yhat_vec = Yhat_out[&idx].clone();
+
+
+				for i in 0..dim0 {
+					for j in 0..dim1 {
+						for k in 0..dim2 {
+							arr.uget_raw([i, j, k, l]).write(Yhat_vec[i + (dim0*j) + (dim0*dim1*k) ]);
+						}
+					}
+				}
+
+			}
+
+			
+
+			arr
+		};
+
+
+
+		arr
+	}
+
+
+
+	// #[pyfn(m)]
+    // fn test_network<'py>(
+    //     py: Python<'py>,
+
+	// 	test_x: PyReadonlyArray4<'py, f32>,
+	// 	//Added
+	// 	test_y: PyReadonlyArray4<'py, f32>,  
+
+	// 	model: Py<PyAny>
+    // ) 
+	// //-> &'py PyArray4<f32>  
+	// -> PyResult<(Py<PyAny>, f32)> {
+
+
+
+	// 	arrayfire::set_backend(arrayfire::Backend::CUDA);
+	// 	arrayfire::device_gc();
+
+	// 	let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
+
+
+	// 	let test_x_dims = test_x.shape().clone().to_vec();
+	// 	let test_y_dims = test_y.shape().clone().to_vec();
+
+	// 	let mut validationdata_X: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+	// 	//added
+	// 	let mut validationdata_Y: nohash_hasher::IntMap<u64, Vec<f32>> = nohash_hasher::IntMap::default();
+
+	// 	let test_x = test_x.to_owned_array() ;
+	// 	let test_y = test_y.to_owned_array();
+
+	// 	let Xslices = test_x_dims[2];
+
+		
+	// 	for traj in 0..test_x_dims[3]
+	// 	{
+	// 		let test_x_dims = test_x.shape().clone().to_vec();
+
+	// 		let mut X = Vec::new();
+
+	// 		if Xslices > 1
+	// 		{
+	// 			X = test_x.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_x_dims[0],test_x_dims[2],test_x_dims[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+	// 		}
+	// 		else 
+	// 		{
+	// 			X = test_x.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_x_dims[1],test_x_dims[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+	// 		}
+
+
+	// 		validationdata_X.insert(traj as u64, X);
+			
+	// 	}
+	// 	//added
+	// 	for traj in 0..test_y_dims[3]
+	// 	{
+	// 		let test_y_dims = test_y.shape().clone().to_vec();
+
+	// 		let mut Y = Vec::new();
+
+	// 		if Xslices > 1
+	// 		{
+	// 			Y = test_y.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_y_dims[0],test_y_dims[2],test_y_dims[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+	// 		}
+	// 		else 
+	// 		{
+	// 			Y = test_y.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([test_y_dims[1],test_y_dims[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+	// 		}
+
+
+	// 		validationdata_Y.insert(traj as u64, Y);
+			
+	// 	}
+		
+	// 	let mut Yhat_out = nohash_hasher::IntMap::default();
+	// 	//added
+
+	// 	let mut eval_metric_out = Vec::new(); 
+	// 	//Train network, stop at lowest crossval
+		
+	// 		raybnn::interface::autotest_f32::test_network(
+	// 		&mut validationdata_X,
+	// 		&mut validationdata_Y,
+	// 		sigmoid_loss,
+	// 		&mut arch_search, 
+
+	// 		&mut Yhat_out, 
+	// 		&mut eval_metric_out
+	// 	);
+		
+		
+
+	// 	/* 
+	// 	arrayfire::set_seed(0);
+	// 	let Yhat_dims = arrayfire::Dim4::new(&[2, 3, 5, 7]);
+	// 	let Yhat_arr = arrayfire::randu::<f32>(Yhat_dims);
+
+	// 	arrayfire::print_gen("Yhat_arr".to_string(), &Yhat_arr,Some(6));
+
+	// 	let mut Yhat_vec = vec!(f32::default();Yhat_arr.elements());
+	// 	Yhat_arr.host(&mut Yhat_vec);
+	// 	*/
+	// 	// FIX #3: Compute test loss from eval_metric_out
+	// 	let test_loss: f32 = if eval_metric_out.is_empty() {
+	// 		LARGE_POS_NUM_f32
+	// 	} else {
+	// 		let sum: f32 = eval_metric_out.iter().sum();
+	// 		sum / (eval_metric_out.len() as f32)
+	// 	};
+
+	// 	println!("Test loss: {}", test_loss);
+
+	// 	let arr = unsafe {
+
+	// 		let dim0 = arch_search.neural_network.netdata.output_size as usize;
+	// 		let dim1 = test_x_dims[1] as usize;
+	// 		let dim2 = test_x_dims[2] as usize;
+	// 		let dim3 = test_x_dims[3] as usize;
+
+	// 		let arr = PyArray4::<f32>::new(py, [dim0, dim1, dim2, dim3], true);
+
+
+	// 		for l in 0..dim3
+	// 		{
+	// 			let idx = l as u64;
+	// 			let Yhat_vec = Yhat_out[&idx].clone();
+
+
+	// 			for i in 0..dim0 {
+	// 				for j in 0..dim1 {
+	// 					for k in 0..dim2 {
+	// 						arr.uget_raw([i, j, k, l]).write(Yhat_vec[i + (dim0*j) + (dim0*dim1*k) ]);
+	// 					}
+	// 				}
+	// 			}
+
+	// 		}
+
+			
+
+	// 		arr
+	// 	};
+
+
+
+	// 	// FIX #4: Return tuple of (predictions, test_loss)
+    // 	Ok((arr.to_object(py), test_loss))
+	// }
+
+
+
+
+
+
+
+	// same as rows_dot
+	#[pyfn(m)]
+    fn magic2<'py>(
+        py: Python<'py>,
+        x: PyReadonlyArray3<'py, f32>,
+    ) -> Py<PyAny> {
+
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+
+		let x_dims = x.shape().to_vec();
+        let x = x.reshape_with_order([x_dims[0],x_dims[2],x_dims[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+
+
+		let mut a = arrayfire::Array::new(&x, arrayfire::Dim4::new(&[x_dims[0] as u64, x_dims[1] as u64, x_dims[2] as u64, 1]));
+		arrayfire::print_gen("a".to_string(), &a, Some(6));
+
+		let mut b = arrayfire::row(&a,1);
+		b = arrayfire::col(&b,0);
+		b = arrayfire::slice(&b,3);
+		arrayfire::print_gen("b".to_string(), &b, Some(6));
+
+		let obj = pythonize(py, &a).unwrap();
+
+		obj
+	}
+
+	// this is a custom Python binding fn, used x and y as input parameters
+    #[pyfn(m)]
+    fn rows_dot<'py>(
+        py: Python<'py>,
+        x: PyReadonlyArray2<'py, f64>,
+        y: PyReadonlyArray2<'py, f64>,
+    ) -> &'py PyArray2<f64> {
+
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+
+		let x_dims = x.shape().to_vec();
+        let x = x.to_vec().unwrap();
+
+
+		let mut a = arrayfire::Array::new(&x, arrayfire::Dim4::new(&[x_dims[1] as u64, x_dims[0] as u64, 1, 1]));
+		a = arrayfire::transpose(&a, false);
+		arrayfire::print_gen("a".to_string(), &a, Some(6));
+
+
+
+		let mut output_vec: Vec<Vec<f64> >  = Vec::new() ;
+		for i in 0..a.dims()[0]
+		{
+			let row = arrayfire::row(&a,i as i64);
+			let mut tempvec = vec!(f64::default();row.elements());
+			row.host(&mut tempvec);
+			output_vec.push(tempvec);
+		}
+
+
+		let output = PyArray2::from_vec2(py, &output_vec).unwrap();
+		output
+    }
+
+
+	#[pyfn(m)]
+	fn state_space_forward_batch<'py>(
+		py: Python<'py>,
+		x_train_py: PyReadonlyArray4<'py, f32>,
+		y_train_py: PyReadonlyArray4<'py, f32>,
+		traj_size: u64,
+		max_epoch: u64,
+		model: Py<PyAny>,
+	) -> PyResult<(Py<PyAny>)> {
+		// Returns (Yhat)
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
+
+		// declare default dims
+		let temp_dims = arrayfire::Dim4::new(&[1,1,1,1]);	
+		
+		// init model params
+		let neuron_size: u64 = arch_search.neural_network.netdata.neuron_size.clone();
+		let batch_size: u64  = arch_search.neural_network.netdata.batch_size.clone();
+		let proc_num: u64 = arch_search.neural_network.netdata.proc_num.clone();
+		let input_size: u64 = arch_search.neural_network.netdata.input_size.clone();
+		let output_size: u64 = arch_search.neural_network.netdata.output_size.clone();
+		let mut active_size: u64 = arch_search.neural_network.netdata.active_size.clone();
+
+		let traj_steps = traj_size + proc_num - 1;
+		let Z_dims = arrayfire::Dim4::new(&[neuron_size,batch_size,traj_steps,1]);
+
+
+		let mut Q = arrayfire::constant::<f32>(0.0,Z_dims);
+		let mut Z = arrayfire::constant::<f32>(0.0,Z_dims);
+
+		let mut WRowIdxCSR = &arch_search.neural_network.WRowIdxCSR;
+		//let mut WColIdx = &arch_search.neural_network.WColIdx;
+	
+		let WValuesdims0 = (arch_search).neural_network.WColIdx.dims()[0];
+
+		let network_params = (arch_search).neural_network.network_params.dims()[0];
+		active_size = (arch_search).neural_network.neuron_idx.dims()[0];
+		let idxsel = arrayfire::rows(&((arch_search).neural_network.neuron_idx), (active_size-output_size)  as i64, (active_size-1)  as i64);
+
+		let mut loss_val = LARGE_POS_NUM_f32;
+		let mut loss_history: Vec<f32> = Vec::new();
+
+		let Hdims0 = (network_params - WValuesdims0)/6;
+
+		let Wstart = 0;
+		let Wend = (WValuesdims0  as i64) - 1;
+	
+		let Hstart = Wend + 1; 
+		let Hend = Hstart + (Hdims0 as i64) - 1;
+	
+		let Astart = Hend + 1; 
+		let Aend = Astart + (Hdims0 as i64) - 1;
+	
+		let Bstart = Aend + 1; 
+		let Bend = Bstart + (Hdims0 as i64) - 1;
+	
+		let Cstart = Bend + 1; 
+		let Cend = Cstart + (Hdims0 as i64) - 1;
+	
+		let Dstart = Cend + 1; 
+		let Dend = Dstart + (Hdims0 as i64) - 1;
+	
+		let Estart = Dend + 1; 
+		let Eend = Estart + (Hdims0 as i64) - 1;
+
+		let Wseqs = [arrayfire::Seq::new(Wstart as i32, Wend as i32, 1i32)];
+		let Hseqs = [arrayfire::Seq::new(Hstart as i32, Hend as i32, 1i32)];
+		let Aseqs = [arrayfire::Seq::new(Astart as i32, Aend as i32, 1i32)];
+		let Bseqs = [arrayfire::Seq::new(Bstart as i32, Bend as i32, 1i32)];
+		let Cseqs = [arrayfire::Seq::new(Cstart as i32, Cend as i32, 1i32)];
+		let Dseqs = [arrayfire::Seq::new(Dstart as i32, Dend as i32, 1i32)];
+		let Eseqs = [arrayfire::Seq::new(Estart as i32, Eend as i32, 1i32)];
+		
+		// Get input array dimensions
+		let x_train_shape = x_train_py.shape().to_vec();
+		let y_train_shape = y_train_py.shape().to_vec();
+		//println!("[FORWARD PyO3] Shape of CNN features received from Python side: {:?}", x_train_shape);
+		//println!("[Forward pass function PyO3] Input train X dims: {:?}", x_train_shape);
+		
+		// this is where error happen!!
+
+		// Initialize empty HashMaps for storing training data
+		let x_slices = x_train_shape[2];
+		let mut traindata_x: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+		let mut traindata_y: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+
+		// Convert PyO3 arrays to Rust ndarrays for processing
+		let x_input_ndarray = x_train_py.to_owned_array();
+		let y_input_ndarray = y_train_py.to_owned_array();
+		// println!("[FORWARD PyO3] CNN features converted to Rust Array: {:?}\n",x_input_ndarray.shape());
+		// println!("[FORWARD PyO3] One-hot labels converted to Rust Array: {:?}\n",y_input_ndarray.shape());
+		
+		// Print only shape and first few elements
+		let sample_data: Vec<f32> = y_input_ndarray.clone().into_iter().take(100).collect();
+		#[cfg(feature = "debug-output")]
+		println!("[Forward pass function PyO3] Input train Y first 50 elements in Rust ndarray: {:?}", sample_data);
+
+		let mut train_x_af =  arrayfire::constant::<f32>(0.0,temp_dims);
+		// FIX: use actual input slice count (traj_steps) instead of traj_size
+		let train_x_dims = arrayfire::Dim4::new(&[input_size, batch_size, x_train_shape[2] as u64, 1]);
+		let train_y_dims = arrayfire::Dim4::new(&[output_size,batch_size,traj_size,1]);
+		let mut train_y_af =  arrayfire::constant::<f32>(0.0,temp_dims);
+
+		for traj in 0..x_train_shape[3]
+		{
+			let mut train_x_rust_vec = Vec::new();
+			let mut train_y_rust_vec = Vec::new();
+			if x_slices > 1
+			{
+				train_x_rust_vec = x_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([x_train_shape[0], x_train_shape[2],x_train_shape[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+				train_y_rust_vec = y_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([y_train_shape[0], y_train_shape[2],y_train_shape[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+			}
+			else
+			{
+				train_x_rust_vec = x_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([x_train_shape[1], x_train_shape[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+				train_y_rust_vec = y_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([y_train_shape[1], y_train_shape[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+			}
+			//println!("train_x_rust_vec shape: {:?}", train_x_rust_vec.len());
+			//println!("train_y_rust_vec shape: {:?}", train_y_rust_vec.len());
+			traindata_x.insert(traj as u64, train_x_rust_vec);
+			traindata_y.insert(traj as u64, train_y_rust_vec);
+		}
+		
+		let mut batch_idx = 0;
+		let epoch_num = traindata_x.len() as u64;
+		train_x_af = arrayfire::Array::new(&traindata_x[&batch_idx], train_x_dims);
+		train_y_af = arrayfire::Array::new(&traindata_y[&batch_idx], train_y_dims);
+		#[cfg(feature = "debug-output")]
+		println!("[Forward pass function PyO3] Input arrayfire training shape: {:?}", train_x_af.dims());
+		#[cfg(feature = "debug-output")]
+		println!("[Forward pass function PyO3] Output arrayfire training shape: {:?}", train_y_af.dims());
+		// Print only first few elements of ArrayFire array
+		//let sample_elements = arrayfire::index(&train_x_af, &[Seq::new(0.0, 9.0, 1.0), Seq::default(), Seq::default(), Seq::default()]);
+		//af_print!("[Forward pass function PyO3] Input arrayfire training first 10 elements: ", sample_elements);
+		let sample_end = std::cmp::min(output_size, 10) - 1;
+		let sample_elements = arrayfire::index(&train_y_af, &[Seq::new(0.0, sample_end as f32, 1.0), Seq::default(), Seq::default(), Seq::default()]);
+		//af_print!("[Forward pass function PyO3] Output arrayfire training: ", sample_elements);
+		//println!("[Forward pass function PyO3] Output arrayfire training: {:?}", sample_elements.dims());
+
+		raybnn::neural::network_f32::state_space_forward_batch(
+			&arch_search.neural_network.netdata,
+			&train_x_af,
+			&WRowIdxCSR,
+		 	&mut arch_search.neural_network.WColIdx,
+			&Wseqs,
+			&Hseqs,
+			&Aseqs,
+			&Bseqs,
+			&Cseqs,
+			&Dseqs,
+			&Eseqs,
+			&arch_search.neural_network.network_params,
+			&mut Z,
+			&mut Q,
+		);
+
+		let Qslices: u64 = Q.dims()[2];
+
+		let mut idxrs = arrayfire::Indexer::default();
+		let seq1 = arrayfire::Seq::new(0.0f32, (batch_size-1) as f32, 1.0);
+		let seq2 = arrayfire::Seq::new((proc_num-1) as f32, (Qslices-1) as f32, 1.0);
+		idxrs.set_index(&idxsel, 0, None);
+		idxrs.set_index(&seq1, 1, None);
+		idxrs.set_index(&seq2, 2, None);
+		let Yhat = arrayfire::index_gen(&Q, idxrs);
+
+		// Diagnostic loss call removed: softmax_cross_entropy assumes traj_size=1 (yidx
+		// becomes 3D when traj_size>1, causing af_lookup to fail with non-vector index).
+		// let loss_val = raybnn::optimal::loss_f32::softmax_cross_entropy(&Yhat, &train_y_af);
+
+		//host over here
+		let mut obj_Yhat : Vec<f32> = vec![0.0; Yhat.elements()];
+		Yhat.host(&mut obj_Yhat);
+		let dims = Yhat.dims();
+		let (d0,d1,d2,d3) = (dims[0] as usize, 
+			dims[1] as usize,dims[2] as usize,dims[3] as usize);
+
+		let nd_array_Yhat = Array::from_shape_vec((d0,d1,d2,d3).f(), obj_Yhat).unwrap();
+		let nd_obj_Yhat = nd_array_Yhat.clone().into_pyarray(py);
+		Ok((nd_obj_Yhat.to_object(py)))
+	}
+
+	fn loss_wrapper<'py>(
+		py: Python<'py>,
+		x_train_py: PyReadonlyArray4<'py, f32>,
+		y_train_py: PyReadonlyArray4<'py, f32>,
+		traj_size: u64,
+		max_epoch: u64,
+		model: Py<PyAny>,
+	) -> &'py PyArray4<f32> {
+		//PyResult<(Py<PyAny>, &'py PyArray4<f32>)>
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
+
+		// declare default dims
+		let temp_dims = arrayfire::Dim4::new(&[1,1,1,1]);	
+		
+		// init model params
+		let neuron_size: u64 = arch_search.neural_network.netdata.neuron_size.clone();
+		let batch_size: u64  = arch_search.neural_network.netdata.batch_size.clone();
+		let proc_num: u64 = arch_search.neural_network.netdata.proc_num.clone();
+		let input_size: u64 = arch_search.neural_network.netdata.input_size.clone();
+		let output_size: u64 = arch_search.neural_network.netdata.output_size.clone();
+		let mut active_size: u64 = arch_search.neural_network.netdata.active_size.clone();
+
+		let traj_steps = traj_size + proc_num - 1;
+		let Z_dims = arrayfire::Dim4::new(&[neuron_size,batch_size,traj_steps,1]);
+
+
+		let mut Q = arrayfire::constant::<f32>(0.0,Z_dims);
+		let mut Z = arrayfire::constant::<f32>(0.0,Z_dims);
+
+		let mut WRowIdxCSR = &arch_search.neural_network.WRowIdxCSR;
+	
+		let WValuesdims0 = (arch_search).neural_network.WColIdx.dims()[0];
+
+		let network_params = (arch_search).neural_network.network_params.dims()[0];
+		active_size = (arch_search).neural_network.neuron_idx.dims()[0];
+		let idxsel = arrayfire::rows(&((arch_search).neural_network.neuron_idx), (active_size-output_size)  as i64, (active_size-1)  as i64);
+
+		let mut loss_val = LARGE_POS_NUM_f32;
+		let mut loss_history: Vec<f32> = Vec::new();
+
+		let Hdims0 = (network_params - WValuesdims0)/6;
+
+		let Wstart = 0;
+		let Wend = (WValuesdims0  as i64) - 1;
+	
+		let Hstart = Wend + 1; 
+		let Hend = Hstart + (Hdims0 as i64) - 1;
+	
+		let Astart = Hend + 1; 
+		let Aend = Astart + (Hdims0 as i64) - 1;
+	
+		let Bstart = Aend + 1; 
+		let Bend = Bstart + (Hdims0 as i64) - 1;
+	
+		let Cstart = Bend + 1; 
+		let Cend = Cstart + (Hdims0 as i64) - 1;
+	
+		let Dstart = Cend + 1; 
+		let Dend = Dstart + (Hdims0 as i64) - 1;
+	
+		let Estart = Dend + 1; 
+		let Eend = Estart + (Hdims0 as i64) - 1;
+
+		let Wseqs = [arrayfire::Seq::new(Wstart as i32, Wend as i32, 1i32)];
+		let Hseqs = [arrayfire::Seq::new(Hstart as i32, Hend as i32, 1i32)];
+		let Aseqs = [arrayfire::Seq::new(Astart as i32, Aend as i32, 1i32)];
+		let Bseqs = [arrayfire::Seq::new(Bstart as i32, Bend as i32, 1i32)];
+		let Cseqs = [arrayfire::Seq::new(Cstart as i32, Cend as i32, 1i32)];
+		let Dseqs = [arrayfire::Seq::new(Dstart as i32, Dend as i32, 1i32)];
+		let Eseqs = [arrayfire::Seq::new(Estart as i32, Eend as i32, 1i32)];
+		
+		//println!("Input X: {:?}", X);
+
+		// Get input array dimensions
+		let x_train_shape = x_train_py.shape().to_vec();
+		let y_train_shape = y_train_py.shape().to_vec();
+		println!("x_train_shape: {:?}", x_train_shape);
+		//println!("[Forward pass function PyO3] Input train X dims: {:?}", x_train_shape);
+		
+		// Initialize empty HashMaps for storing training data
+		let x_slices = x_train_shape[2];
+		let mut traindata_x: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+		let mut traindata_y: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+
+		// Convert PyO3 arrays to Rust ndarrays for processing
+		let x_input_ndarray = x_train_py.to_owned_array();
+		let y_input_ndarray = y_train_py.to_owned_array();
+		println!("Shape of Rust array converted training input from CNN side: {:?}\n",x_input_ndarray.shape());
+		println!("y_input_ndarray shape: {:?}\n",y_input_ndarray.shape());
+		//println!("y_input_ndarray shape: {:?}\n",y_input_ndarray);
+		// Print only shape and first few elements
+		let sample_data: Vec<f32> = y_input_ndarray.clone().into_iter().take(100).collect();
+		#[cfg(feature = "debug-output")]
+		println!("[Forward pass function PyO3] Input train Y first 50 elements in Rust ndarray: {:?}", sample_data);
+
+		let mut train_x_af =  arrayfire::constant::<f32>(0.0,temp_dims);
+		// FIX: use actual input slice count (traj_steps) instead of traj_size
+		let train_x_dims = arrayfire::Dim4::new(&[input_size, batch_size, x_train_shape[2] as u64, 1]);
+		let train_y_dims = arrayfire::Dim4::new(&[output_size,batch_size,traj_size,1]);
+		let mut train_y_af =  arrayfire::constant::<f32>(0.0,temp_dims);
+
+		for traj in 0..x_train_shape[3]
+		{
+			let mut train_x_rust_vec = Vec::new();
+			let mut train_y_rust_vec = Vec::new();
+			if x_slices > 1
+			{
+				train_x_rust_vec = x_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([x_train_shape[0], x_train_shape[2],x_train_shape[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+				train_y_rust_vec = y_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([y_train_shape[0], y_train_shape[2],y_train_shape[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+			}
+			else
+			{
+				train_x_rust_vec = x_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([x_train_shape[1], x_train_shape[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+				train_y_rust_vec = y_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([y_train_shape[1], y_train_shape[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+			}
+			//println!("train_x_rust_vec shape: {:?}", train_x_rust_vec.len());
+			//println!("train_y_rust_vec shape: {:?}", train_y_rust_vec.len());
+			traindata_x.insert(traj as u64, train_x_rust_vec);
+			traindata_y.insert(traj as u64, train_y_rust_vec);
+		}
+
+
+		
+		let mut batch_idx = 0;
+		let epoch_num = traindata_x.len() as u64;
+		train_x_af = arrayfire::Array::new(&traindata_x[&batch_idx], train_x_dims);
+		train_y_af = arrayfire::Array::new(&traindata_y[&batch_idx], train_y_dims);
+		#[cfg(feature = "debug-output")]
+		println!("[Forward pass function PyO3] Input arrayfire training shape: {:?}", train_x_af.dims());
+		#[cfg(feature = "debug-output")]
+		println!("[Forward pass function PyO3] Output arrayfire training shape: {:?}", train_y_af.dims());
+		// Print only first few elements of ArrayFire array
+		//let sample_elements = arrayfire::index(&train_x_af, &[Seq::new(0.0, 9.0, 1.0), Seq::default(), Seq::default(), Seq::default()]);
+		//af_print!("[Forward pass function PyO3] Input arrayfire training first 10 elements: ", sample_elements);
+		let sample_end2 = std::cmp::min(output_size, 10) - 1;
+		let sample_elements = arrayfire::index(&train_y_af, &[Seq::new(0.0, sample_end2 as f32, 1.0), Seq::default(), Seq::default(), Seq::default()]);
+		//af_print!("[Forward pass function PyO3] Output arrayfire training: ", sample_elements);
+		//println!("[Forward pass function PyO3] Output arrayfire training: {:?}", sample_elements.dims());
+
+
+		let Qslices: u64 = Q.dims()[2];
+
+		let mut idxrs = arrayfire::Indexer::default();
+		let seq1 = arrayfire::Seq::new(0.0f32, (batch_size-1) as f32, 1.0);
+		let seq2 = arrayfire::Seq::new((proc_num-1) as f32, (Qslices-1) as f32, 1.0);
+		idxrs.set_index(&idxsel, 0, None);
+		idxrs.set_index(&seq1, 1, None);
+		idxrs.set_index(&seq2, 2, None);
+		let Yhat = arrayfire::index_gen(&Q, idxrs);
+		
+		raybnn::interface::autotrain_f32::loss_wrapper(
+			&arch_search.neural_network.netdata,
+			&train_x_af,
+			
+			&WRowIdxCSR,
+			&mut arch_search.neural_network.WColIdx,
+	
+			&Wseqs,
+			&Hseqs,
+			&Aseqs,
+			&Bseqs,
+			&Cseqs,
+			&Dseqs,
+			&Eseqs,
+			&arch_search.neural_network.network_params,
+			&idxsel,
+			&train_y_af,
+			raybnn::optimal::loss_f32::softmax_cross_entropy,
+			&mut Z,
+			&mut Q,
+			&mut loss_val
+		);
+
+		//host over here
+		let mut obj_Yhat : Vec<f32> = vec![0.0; Yhat.elements()];
+		Yhat.host(&mut obj_Yhat);
+		let dims = Yhat.dims();
+		let (d0,d1,d2,d3) = (dims[0] as usize, 
+			dims[1] as usize,dims[2] as usize,dims[3] as usize);
+
+		let nd_array_Yhat = Array::from_shape_vec((d0,d1,d2,d3).f(), obj_Yhat).unwrap();
+		let nd_obj_Yhat = nd_array_Yhat.clone().into_pyarray(py);
+		
+		// nd_obj_Yhat is NumPy array
+		nd_obj_Yhat
+		//Ok((obj, nd_obj_Yhat))
+
+	}
+
+
+	#[pyfn(m)]
+	fn state_space_backward_group2<'py>(
+		py: Python<'py>,
+		x_train_py: PyReadonlyArray4<'py, f32>,
+		y_train_py: PyReadonlyArray4<'py, f32>,
+		traj_size: u64,
+		max_epoch: u64,
+		alpha0: f32,
+		model: Py<PyAny>,
+		i: u64,
+	) -> PyResult<(Py<PyAny>, Py<PyAny>, Py<PyAny>, Py<PyAny>)> {
+		// Returns (dL_dX gradient, updated_params, adam_mt, adam_vt)
+		arrayfire::set_backend(arrayfire::Backend::CUDA);
+		let depythonize_arch = model.clone_ref(py);
+		let mut arch_search: raybnn::interface::automatic_f32::arch_search_type = depythonize(model.as_ref(py)).unwrap();
+		let neuron_size: u64 = arch_search.neural_network.netdata.neuron_size.clone();
+		let input_size: u64 = arch_search.neural_network.netdata.input_size.clone();
+		let output_size: u64 = arch_search.neural_network.netdata.output_size.clone();
+		let proc_num: u64 = arch_search.neural_network.netdata.proc_num.clone();
+		let batch_size: u64 = arch_search.neural_network.netdata.batch_size.clone();
+		let mut active_size: u64 = arch_search.neural_network.netdata.active_size.clone();
+
+		let temp_dims = arrayfire::Dim4::new(&[1,1,1,1]);
+
+		let mut WRowIdxCOO = raybnn::graph::large_sparse_i32::CSR_to_COO(&arch_search.neural_network.WRowIdxCSR);
+		let traj_steps = traj_size + proc_num - 1;
+		let Z_dims = arrayfire::Dim4::new(&[neuron_size, batch_size, traj_steps,1]);
+
+		let mut Q = arrayfire::constant::<f32>(0.0, Z_dims);
+		let mut Z = arrayfire::constant::<f32>(0.0, Z_dims);
+
+		let idxsel = arrayfire::rows(&((arch_search).neural_network.neuron_idx), (active_size-output_size) as i64, (active_size-1) as i64);
+		let Qslices: u64 = Q.dims()[2];
+
+		let X_dims = arrayfire::Dim4::new(&[input_size,batch_size,traj_steps,1]);
+		let mut total_param_size = arch_search.neural_network.network_params.dims()[0];
+		let mut mt_dims = arrayfire::Dim4::new(&[total_param_size,1,1,1]);
+		let mut mt = arrayfire::constant::<f32>(0.0,mt_dims);
+		let mut vt = arrayfire::constant::<f32>(0.0,mt_dims);
+		let mut grad = arrayfire::constant::<f32>(0.0,mt_dims);
+		let mut dL_dX = arrayfire::constant::<f32>(0.0, X_dims);
+		let mut grad_input2 = arrayfire::constant::<f32>(0.0, X_dims);
+
+		let WValuesdims0 = (arch_search).neural_network.WColIdx.dims()[0];
+		let mut WRowIdxCSR = &arch_search.neural_network.WRowIdxCSR;
+
+		let mut idxsel_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+		let mut valsel_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+
+		let mut cvec_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+		let mut dXsel_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+
+		let mut nrows_out: nohash_hasher::IntMap<i64, u64> = nohash_hasher::IntMap::default();
+		let mut sparseval_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+		let mut sparsecol_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+		let mut sparserow_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+		
+		let Hdims0 = (total_param_size - WValuesdims0)/6;
+		let Wstart = 0;
+		let Wend = (WValuesdims0  as i64) - 1;
+	
+		let Hstart = Wend + 1; 
+		let Hend = Hstart + (Hdims0 as i64) - 1;
+	
+		let Astart = Hend + 1; 
+		let Aend = Astart + (Hdims0 as i64) - 1;
+	
+		let Bstart = Aend + 1; 
+		let Bend = Bstart + (Hdims0 as i64) - 1;
+	
+		let Cstart = Bend + 1; 
+		let Cend = Cstart + (Hdims0 as i64) - 1;
+	
+		let Dstart = Cend + 1; 
+		let Dend = Dstart + (Hdims0 as i64) - 1;
+	
+		let Estart = Dend + 1; 
+		let Eend = Estart + (Hdims0 as i64) - 1;
+
+		let mut Wseqs = [arrayfire::Seq::new(Wstart as i32, Wend as i32, 1i32)];
+		let mut Hseqs = [arrayfire::Seq::new(Hstart as i32, Hend as i32, 1i32)];
+		let mut Aseqs = [arrayfire::Seq::new(Astart as i32, Aend as i32, 1i32)];
+		let mut Bseqs = [arrayfire::Seq::new(Bstart as i32, Bend as i32, 1i32)];
+		let mut Cseqs = [arrayfire::Seq::new(Cstart as i32, Cend as i32, 1i32)];
+		let mut Dseqs = [arrayfire::Seq::new(Dstart as i32, Dend as i32, 1i32)];
+		let mut Eseqs = [arrayfire::Seq::new(Estart as i32, Eend as i32, 1i32)];
+	
+		let mut Hidxsel_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+		let mut Aidxsel_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+		let mut Bidxsel_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+		let mut Cidxsel_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+		let mut Didxsel_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+		let mut Eidxsel_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+		let mut combidxsel_out: nohash_hasher::IntMap<i64, arrayfire::Array<i32> > = nohash_hasher::IntMap::default();
+
+		let mut dAseqs_out: nohash_hasher::IntMap<i64, [arrayfire::Seq<i32>; 2] > = nohash_hasher::IntMap::default();
+		let mut dBseqs_out: nohash_hasher::IntMap<i64, [arrayfire::Seq<i32>; 2] > = nohash_hasher::IntMap::default();
+		let mut dCseqs_out: nohash_hasher::IntMap<i64, [arrayfire::Seq<i32>; 2] > = nohash_hasher::IntMap::default();
+		let mut dDseqs_out: nohash_hasher::IntMap<i64, [arrayfire::Seq<i32>; 2] > = nohash_hasher::IntMap::default();
+		let mut dEseqs_out: nohash_hasher::IntMap<i64, [arrayfire::Seq<i32>; 2] > = nohash_hasher::IntMap::default();
+
+		let wcolidx_dims_0 = arch_search.neural_network.WColIdx.dims()[0];
+
+		let x_train_shape = x_train_py.shape().to_vec();
+		let y_train_shape = y_train_py.shape().to_vec();
+
+		
+		
+		let x_slices = x_train_shape[2];
+		let mut traindata_x: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+		let mut traindata_y: nohash_hasher::IntMap<u64, Vec<f32> > = nohash_hasher::IntMap::default();
+		// Rust ndarray
+		let x_input_ndarray = x_train_py.to_owned_array();
+		let y_input_ndarray = y_train_py.to_owned_array();
+		
+		// Print only shape and first few elements
+		//let sample_data: Vec<f32> = x_input_ndarray.clone().into_iter().take(50).collect();
+
+		let mut train_x_af =  arrayfire::constant::<f32>(0.0,temp_dims);
+		// FIX: use actual input slice count (traj_steps) instead of traj_size
+		let train_x_dims = arrayfire::Dim4::new(&[input_size, batch_size, x_train_shape[2] as u64, 1]);
+		let train_y_dims = arrayfire::Dim4::new(&[output_size,batch_size,traj_size,1]);
+		let mut train_y_af =  arrayfire::constant::<f32>(0.0,temp_dims);
+
+		for traj in 0..x_train_shape[3]
+		{
+			let mut train_x_rust_vec = Vec::new();
+			let mut train_y_rust_vec = Vec::new();
+			if x_slices > 1
+			{
+				train_x_rust_vec = x_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([x_train_shape[0], x_train_shape[2],x_train_shape[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+				train_y_rust_vec = y_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([y_train_shape[0], y_train_shape[2],y_train_shape[1]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+			}
+			else
+			{
+				train_x_rust_vec = x_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([x_train_shape[1], x_train_shape[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+				train_y_rust_vec = y_input_ndarray.index_axis(Axis(3), traj).to_owned().into_pyarray(py).reshape_with_order([y_train_shape[1], y_train_shape[0]], numpy::npyffi::types::NPY_ORDER::NPY_FORTRANORDER).unwrap().to_vec().unwrap();
+			}
+
+			traindata_x.insert(traj as u64, train_x_rust_vec);
+			traindata_y.insert(traj as u64, train_y_rust_vec);
+		}
+		#[cfg(feature = "debug-output")]
+		println!("traindata_x length: {:?}", traindata_x.len());
+		let mut batch_idx = 0;
+		let epoch_num = traindata_x.len() as u64;
+		train_x_af = arrayfire::Array::new(&traindata_x[&batch_idx], train_x_dims);
+		train_y_af = arrayfire::Array::new(&traindata_y[&batch_idx], train_y_dims);
+
+		// Host network_params to CPU BEFORE forward/backward (they may corrupt the GPU array)
+		let param_count = arch_search.neural_network.network_params.elements();
+		let mut params_host: Vec<f32> = vec![0.0; param_count];
+		arch_search.neural_network.network_params.host(&mut params_host);
+		let params_dims = arch_search.neural_network.network_params.dims();
+		//println!("[DEBUG BACKWARD] params hosted BEFORE forward, count={}, dims={:?}", param_count, params_dims);
+
+		// FIX: Run forward pass to populate Z and Q with actual activations
+		// (Previously Z/Q were zero-initialized, causing Yhat=0 in backward)
+		raybnn::neural::network_f32::state_space_forward_batch(
+			&arch_search.neural_network.netdata,
+			&train_x_af,
+			&arch_search.neural_network.WRowIdxCSR,
+			&mut arch_search.neural_network.WColIdx,
+			&Wseqs,
+			&Hseqs,
+			&Aseqs,
+			&Bseqs,
+			&Cseqs,
+			&Dseqs,
+			&Eseqs,
+			&arch_search.neural_network.network_params,
+			&mut Z,
+			&mut Q,
+		);
+
+		raybnn::graph::path_f32::find_path_backward_group2(
+			&arch_search.neural_network.netdata,
+			traj_steps,
+			traj_size,
+
+			&WRowIdxCOO,
+			&mut arch_search.neural_network.WColIdx,
+			&arch_search.neural_network.neuron_idx,
+			wcolidx_dims_0,
+			
+			neuron_size,
+			neuron_size,
+			neuron_size,
+			neuron_size,
+			neuron_size,
+			neuron_size,
+
+			&mut idxsel_out,
+			&mut valsel_out,
+
+			&mut cvec_out,
+			&mut dXsel_out,
+
+			&mut nrows_out,
+			&mut sparseval_out,
+			&mut sparserow_out,
+			&mut sparsecol_out,
+
+			&mut Hidxsel_out,
+			&mut Aidxsel_out,
+			&mut Bidxsel_out,
+			&mut Cidxsel_out,
+			&mut Didxsel_out,
+			&mut Eidxsel_out,
+			&mut combidxsel_out,
+
+			&mut dAseqs_out,
+			&mut dBseqs_out,
+			&mut dCseqs_out,
+			&mut dDseqs_out,
+			&mut dEseqs_out,
+
+			&mut Wseqs,
+			&mut Hseqs,
+			&mut Aseqs,
+			&mut Bseqs,
+			&mut Cseqs,
+			&mut Dseqs,
+			&mut Eseqs,
+		);
+
+			raybnn::neural::network_f32::state_space_backward_group2(
+			&arch_search.neural_network.netdata,
+			&train_x_af,
+			&arch_search.neural_network.network_params,
+
+			&Z,
+			&Q,
+			&train_y_af,
+			raybnn::optimal::loss_f32::softmax_cross_entropy_grad,
+			&arch_search.neural_network.neuron_idx,
+			
+			&mut idxsel_out,
+			&mut valsel_out,
+			
+			&mut cvec_out,
+			&mut dXsel_out,
+		
+			&mut nrows_out,
+			&mut sparseval_out,
+			&mut sparserow_out,
+			&mut sparsecol_out,
+
+			&mut Hidxsel_out,
+			&mut Aidxsel_out,
+			&mut Bidxsel_out,
+			&mut Cidxsel_out,
+			&mut Didxsel_out,
+			&mut Eidxsel_out,
+			&mut combidxsel_out,
+
+			&mut dAseqs_out,
+			&mut dBseqs_out,
+			&mut dCseqs_out,
+			&mut dDseqs_out,
+			&mut dEseqs_out,
+
+			&mut grad,
+			&mut dL_dX,
+			&mut grad_input2
+		);
+
+		// DEFERRED WEIGHT UPDATE FIX: Do NOT update BNN weights here.
+		// Return raw gradient + dL_dX so Python can update BNN weights
+		// AFTER CNN optimizer.step(), preventing the "moving target" problem.
+
+		// Negate grad (same as autotrain_f32.rs line 636: grad = -1.0*grad)
+		grad = -1.0f32 * grad;
+
+		// Host grad (negated parameter gradients) to CPU
+		let grad_count = grad.elements();
+		let mut grad_host: Vec<f32> = vec![0.0; grad_count];
+		grad.host(&mut grad_host);
+
+		// Host dL_dX (input gradients back to CNN) to CPU
+		let dlx_count = dL_dX.elements();
+		let dlx_dims = dL_dX.dims();
+		let mut grad_input_back_to_cnn: Vec<f32> = vec![0.0; dlx_count];
+		dL_dX.host(&mut grad_input_back_to_cnn);
+		//println!("[DEBUG BACKWARD] dL_dX hosted, count={}, dims={:?}", dlx_count, dlx_dims);
+
+		// Build numpy arrays from CPU data
+		let (d0, d1, d2, d3) = (dlx_dims[0] as usize, dlx_dims[1] as usize,
+			dlx_dims[2] as usize, dlx_dims[3] as usize);
+		let nd_array_grad_input = Array::from_shape_vec((d0, d1, d2, d3).f(), grad_input_back_to_cnn).unwrap();
+		let nd_obj_grad_input = nd_array_grad_input.into_pyarray(py);
+
+		// Return raw negated grad as 1D numpy array (for Python-side Adam + weight update)
+		let py_grad = numpy::PyArray1::from_vec(py, grad_host).to_object(py);
+
+		// Return current params (unchanged) so Python knows the base to update from
+		let nd_params = Array::from_shape_vec(
+			(params_dims[0] as usize, params_dims[1] as usize, params_dims[2] as usize, params_dims[3] as usize).f(),
+			params_host
+		).unwrap();
+		let py_params = nd_params.into_pyarray(py).to_object(py);
+
+		// Return (dL_dX, raw_negated_grad, current_params, dummy)
+		// 2nd element changed from updated_params → raw negated BNN gradient
+		// 3rd element is current params (unchanged)
+		// 4th element is placeholder for API compatibility
+		let py_dummy = numpy::PyArray1::from_vec(py, vec![0.0f32; 1]).to_object(py);
+
+		Ok((nd_obj_grad_input.to_object(py), py_grad, py_params, py_dummy))
+		
+	}
+	Ok(())
+
+	}
+
+
+

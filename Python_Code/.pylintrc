@@ -1,0 +1,44 @@
+[MASTER]
+
+extension-pkg-allow-list=torch,numpy
+
+ignore=venv,build,__pycache__
+unsafe-load-any-extension=yes
+
+[MESSAGE CONTROL]
+disable=
+	missing-docstring,
+	invalid-name,
+	too-many-arguments,
+	too-many-locals,
+	too-many-branches,
+    too-many-statements,
+    too-many-instance-attributes,
+    line-too-long,
+    duplicate-code,
+    import-error,
+    no-member,
+    too-few-public-methods
+
+[TYPECHECK]
+# Trust all dynamic members inside these packages (extra safety)
+generated-members=torch.*,numpy.*
+
+
+[FORMAT]
+max-line-length=120
+
+
+[REPORTS]
+output-format=colorized
+score=no
+
+
+[DESIGN]
+max-args=10
+max-locals=30
+max-branches=20
+max-statements=80
+max-attributes=12
+
+
