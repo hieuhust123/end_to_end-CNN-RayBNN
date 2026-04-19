@@ -1,0 +1,20 @@
+# System Files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Large Data / Research Artifacts (Adjust based on your MWT dataset)
+*.mat
+*.npy
+*.npz
+*.log
+
+# VS Code
+.vscode/
+
+mwt_eeg
