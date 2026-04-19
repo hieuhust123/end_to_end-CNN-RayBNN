@@ -30,20 +30,33 @@ class MWTDataset(torch.utils.data.Dataset):
     """MWT EEG dataset that windows raw signals on-the-fly.
 
     Stores only raw padded signals in RAM (~280 MB for 76 subjects).
-    Each __getitem__ call extracts a single 16s window from the raw signal.
+    Each __getitem__ call extracts traj_size consecutive 16s windows, each
+    shifted by traj_stride samples from the previous one.
+
+    traj_stride=800 (4 s at 200 Hz) is chosen because the median MWT event
+    duration is ~4.6 s: overlapping windows shifted by 4 s ensure that most
+    events appear across multiple trajectory slots so RayBNN can observe them
+    at different phases (onset, peak, offset).
+
+    When traj_size=1 the output shapes are squeezed back to the original
+    (2, 3200, 1) / scalar so nothing downstream needs to change.
     """
 
-    def __init__(self, mat_dir, file_list, w_len=1600, stride=1):
+    def __init__(self, mat_dir, file_list, w_len=1600, stride=1, traj_size=1, traj_stride=800):
         """
         Args:
             mat_dir: path to directory containing .mat files
             file_list: list of .mat filenames to include
             w_len: half-window size in samples (1600 = 8s at 200Hz, full window = 16s)
-            stride: take every Nth sample (stride=16 reduces 28.8M to ~1.8M with negligible info loss)
+            stride: take every Nth sample for the primary index
+            traj_size: number of consecutive trajectory windows per item
+            traj_stride: sample offset between consecutive trajectory windows
         """
         self.w_len = w_len
         self.data_dim = w_len * 2  # 3200 samples = 16 seconds
         self.stride = stride
+        self.traj_size = traj_size
+        self.traj_stride = traj_stride
 
         # Load raw signals and pad them
         self.signals_O1 = []  # list of (483200,) arrays
@@ -103,23 +116,35 @@ class MWTDataset(torch.utils.data.Dataset):
         max_idx = len(self.labels[subj_idx]) - 1
         sample_idx = min(sample_idx, max_idx)
 
-        # Extract 16s window centered on this sample
-        # After padding, sample_idx in the padded signal starts at sample_idx (not sample_idx + w_len)
-        # because the label at position sample_idx corresponds to the window centered at sample_idx + w_len
-        center = sample_idx + self.w_len
-        start = center - self.w_len
-        end = center + self.w_len  # end = start + 3200
+        windows = []
+        labels_out = []
+        for t in range(self.traj_size):
+            # Each trajectory slot is shifted by t * traj_stride samples.
+            # Clamp so we never go out of bounds for any subject.
+            s_idx = min(sample_idx + t * self.traj_stride, max_idx)
 
-        window_O1 = self.signals_O1[subj_idx][start:end]  # (3200,)
-        window_O2 = self.signals_O2[subj_idx][start:end]  # (3200,)
+            center = s_idx + self.w_len
+            start  = center - self.w_len
+            end    = center + self.w_len  # = start + 3200
 
-        # Already pre-normalized in __init__, just stack and reshape for Conv2D: (2, 3200, 1)
-        window = np.stack([window_O1, window_O2], axis=0)  # (2, 3200)
-        window = window[:, :, np.newaxis]  # (2, 3200, 1)
+            window_O1 = self.signals_O1[subj_idx][start:end]  # (3200,)
+            window_O2 = self.signals_O2[subj_idx][start:end]  # (3200,)
 
-        label = self.labels[subj_idx][sample_idx]
+            # Stack channels and add width dim for Conv2D: (2, 3200, 1)
+            window = np.stack([window_O1, window_O2], axis=0)
+            window = window[:, :, np.newaxis]
+            windows.append(window)
+            labels_out.append(self.labels[subj_idx][s_idx])
 
-        return torch.from_numpy(window).float(), torch.tensor(label, dtype=torch.long)
+        if self.traj_size == 1:
+            # Preserve original scalar/3D behaviour so traj_size=1 needs no
+            # downstream changes.
+            return torch.from_numpy(windows[0]).float(), torch.tensor(labels_out[0], dtype=torch.long)
+
+        # traj_size > 1: return (T, 2, 3200, 1) and (T,)
+        windows_arr = np.stack(windows, axis=0)   # (T, 2, 3200, 1)
+        labels_arr  = np.array(labels_out, dtype=np.int64)  # (T,)
+        return torch.from_numpy(windows_arr).float(), torch.from_numpy(labels_arr)
 
 
 def make_4fold_splits(mat_dir, seed=42):
@@ -395,11 +420,6 @@ def main(train_files, test_files, mat_dir, fold_idx=0):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[Fold {fold_idx+1}] Using device: {device}")
 
-    print(f"[Fold {fold_idx+1}] Loading training dataset ({len(train_files)} subjects)...")
-    train_dataset = MWTDataset(mat_dir, train_files, stride=50)
-    print(f"[Fold {fold_idx+1}] Loading test dataset ({len(test_files)} subjects)...")
-    test_dataset = MWTDataset(mat_dir, test_files, stride=50)
-
     ## Parameter setting for MWT EEG dataset
     dir_path = "/tmp/"
     max_input_size = 256
@@ -414,9 +434,18 @@ def main(train_files, test_files, mat_dir, fold_idx=0):
     # while staying well within VRAM budget (~12 GB Titan Xp).
     # RayBNN also uses this as its fixed batch size.
     batch_size = 1000
-    traj_size = 1
+    traj_size = 2   # number of consecutive 16s windows per RayBNN trajectory slot
+    # traj_stride=800 (4s at 200Hz): overlapping windows shifted by 4s so that
+    # short MWT events (median 4.6s) appear across multiple trajectory slots,
+    # allowing RayBNN to observe event onset and offset in different slots.
+    traj_stride = 800
 
-    proc_num = 4
+    proc_num = 2
+
+    print(f"[Fold {fold_idx+1}] Loading training dataset ({len(train_files)} subjects)...")
+    train_dataset = MWTDataset(mat_dir, train_files, stride=50, traj_size=traj_size, traj_stride=traj_stride)
+    print(f"[Fold {fold_idx+1}] Loading test dataset ({len(test_files)} subjects)...")
+    test_dataset = MWTDataset(mat_dir, test_files, stride=50, traj_size=traj_size, traj_stride=traj_stride)
     active_size = 1000
 
     training_samples = 1  # Each AutoGrad call processes 1 batch (batch_size samples)
@@ -484,26 +513,39 @@ def main(train_files, test_files, mat_dir, fold_idx=0):
             ctx.training_samples = training_samples
             ctx.alpha0 = alpha0
 
-            # features_flat.shape # torch.Size([1000, 256])
-            # y_labels.shape # torch.Size([1000])
+            # When traj_size=1: features_flat (1000,256), y_labels (1000,)
+            # When traj_size=T: features_flat (T*1000,256), y_labels (T*1000,)
+            # — already flattened by EndtoEndTrainer.forward before calling apply()
 
             # Convert X and Y to numpy arrays (Convert PyTorch -> NumPy)
-            features_np = features_flat.detach().cpu().numpy()
-            y_labels_np = y_labels.detach().cpu().numpy()
+            features_np = features_flat.detach().cpu().numpy()  # (T*batch, 256) or (batch, 256)
+            y_labels_np = y_labels.detach().cpu().numpy()        # (T*batch,)    or (batch,)
 
-            # Create training arrays with 1 trajectory (this call = 1 batch)
-            train_x = np.zeros((input_size, batch_size, traj_size, 1), dtype=np.float32)
-            train_y = np.zeros((output_size, batch_size, traj_size, 1), dtype=np.float32)
+            # The forward loop in network_f32.rs runs traj_steps = traj_size + proc_num - 1
+            # iterations and calls slice(X, i) for i in 0..traj_steps-1.
+            # X.dims()[2] must equal traj_steps or slice(X, i) panics for i >= traj_size.
+            # The binding (lib.rs) now reads train_x_dims from x_train_shape[2], so it
+            # accepts whatever size Python passes.
+            # train_y only needs traj_size slices (backward uses its own Yslices counter).
+            # Warm-up slots traj_size..traj_steps-1 in train_x are zero-padded.
+            traj_steps = traj_size + proc_num - 1
+            train_x = np.zeros((input_size, batch_size, traj_steps, 1), dtype=np.float32)
+            train_y = np.zeros((output_size, batch_size, traj_size,  1), dtype=np.float32)
 
-            # Vectorized data formatting (replaces slow per-sample loop)
-            train_x[:, :, 0, 0] = features_np.T  # (256, 1000)
-            indices = y_labels_np.astype(int)
-            valid = (indices >= 0) & (indices < output_size)
-            train_y[indices[valid], np.where(valid)[0], 0, 0] = 1.0
+            # Fill the first traj_size slots with real data; warm-up slots stay zero.
+            features_traj = features_np.reshape(traj_size, batch_size, input_size)  # (T, B, 256)
+            labels_traj   = y_labels_np.reshape(traj_size, batch_size)              # (T, B)
+
+            for t in range(traj_size):
+                train_x[:, :, t, 0] = features_traj[t].T  # (256, batch)
+                indices_t = labels_traj[t].astype(int)
+                valid_t   = (indices_t >= 0) & (indices_t < output_size)
+                train_y[indices_t[valid_t], np.where(valid_t)[0], t, 0] = 1.0
 
             _verbose = (AutoGradEndtoEnd._current_batch == 0)
             if _verbose:
                 print("[FORWARD AutoGrad] CNN features reshaped as RayBNN input: ", train_x.shape)
+                print(f"[FORWARD AutoGrad] traj_size={traj_size}, proc_num={proc_num}, traj_steps={traj_steps}")
 
             # Forward returns only Yhat (single numpy array). arch_search is not modified.
             Yhat_array = raybnn_python.state_space_forward_batch(train_x, train_y,
@@ -520,8 +562,13 @@ def main(train_files, test_files, mat_dir, fold_idx=0):
             # Convert Yhat from numpy arrays to Pytorch tensors
             Yhat_tensor = torch.from_numpy(Yhat_array).to(features_flat.device)
 
-            # Yhat_tensor.shape # torch.Size([4, 1000, 1, 1])
-            Yhat = Yhat_tensor.squeeze(-1).squeeze(-1).T
+            # Yhat_tensor shape: [output_size, batch_size, traj_size, 1]
+            # Average predictions over the traj_size dimension (dense prediction:
+            # all slots have real labels so all predictions contribute equally),
+            # then squeeze the trailing 1 and transpose to [batch_size, output_size].
+            # traj_size=1 path: mean(dim=2) is a no-op on the size-1 dim, identical
+            # to the old squeeze(-1).squeeze(-1).T behaviour.
+            Yhat = Yhat_tensor.mean(dim=2).squeeze(-1).T  # (output, batch, 1) -> (batch, output)
 
             if _verbose:
                 print(f"[MAIN FWD] Yhat mean={Yhat.mean().item():.6f} max={Yhat.max().item():.6f} min={Yhat.min().item():.6f} std={Yhat.std().item():.6f}")
@@ -573,7 +620,13 @@ def main(train_files, test_files, mat_dir, fold_idx=0):
                 if not isinstance(grad_result, np.ndarray):
                     grad_result = np.array(grad_result, dtype=np.float32)
 
-                grad_result_reshaped = grad_result[:, :, 0, 0].T
+                # grad_result (dL_dX) shape: [input_size, batch_size, traj_steps, 1]
+                # Slots 0..traj_size-1 are the gradients for the real inputs.
+                # Slots traj_size..traj_steps-1 are warm-up (zero-padded input) — discard.
+                # Need output shape (traj_size * batch_size, input_size) to match features_flat.
+                # Extract first traj_size slots: [256, 1000, traj_size] → transpose+reshape → [T*B, 256]
+                grad_real = grad_result[:, :, :traj_size, 0]           # (256, B, T)
+                grad_result_reshaped = grad_real.transpose(2, 1, 0).reshape(traj_size * batch_size, input_size)  # (T*B, 256)
 
                 assert not np.isnan(grad_result).any(), "NaN in gradients!"
 
@@ -634,11 +687,28 @@ def main(train_files, test_files, mat_dir, fold_idx=0):
 
         def forward(self, raw_eeg, y_labels, verbose=True):
         # Move inputs to the same device as CNN
-            raw_eeg = raw_eeg.to(self.device)
+            raw_eeg  = raw_eeg.to(self.device)
             y_labels = y_labels.to(self.device)
+
+            traj_size = self.traj_size
+
+            if traj_size > 1:
+                # raw_eeg:  (batch, T, 2, 3200, 1)
+                # y_labels: (batch, T)
+                batch = raw_eeg.shape[0]
+                # Flatten T into batch so CNN sees standard (N, 2, 3200, 1)
+                # Layout after reshape: rows 0..batch-1 = slot 0 samples,
+                #                       rows batch..2*batch-1 = slot 1 samples, etc.
+                # This matches the (T, batch, 256) reshape used in AutoGradEndtoEnd.forward.
+                raw_eeg_flat  = raw_eeg.permute(1, 0, 2, 3, 4).reshape(traj_size * batch, *raw_eeg.shape[2:])
+                y_labels_flat = y_labels.permute(1, 0).reshape(traj_size * batch)
+            else:
+                raw_eeg_flat  = raw_eeg
+                y_labels_flat = y_labels
+
         # CNN forward pass with mixed precision (float16 on GPU for Conv2d speedup)
             with torch.amp.autocast(device_type=self.device.type, enabled=(self.device.type == 'cuda')):
-                features = self.cnn(raw_eeg, y_labels, verbose)
+                features = self.cnn(raw_eeg_flat, y_labels_flat, verbose)
             features = features.float()  # Ensure float32 at RayBNN boundary
 
             # Print CNN Output (Features) Before RayBNN ===
@@ -662,8 +732,8 @@ def main(train_files, test_files, mat_dir, fold_idx=0):
                     print("  Features vary across samples")
                 print("="*70 + "\n")
             output = AutoGradEndtoEnd.apply(
-                features,          # CNN features (batch, 256)
-                y_labels,          # labels
+                features,          # CNN features (T*batch, 256) or (batch, 256)
+                y_labels_flat,     # labels (T*batch,) or (batch,)
                 self.batch_size,   # batch size
                 self.traj_size,    # trajectory size
                 self.max_epoch,    # max epochs
@@ -926,6 +996,9 @@ def train_ete_model(model, train_dataset, test_dataset, alpha0, batch_size, max_
         for i, (batch_x, batch_y) in enumerate(train_loader):
             batch_x = batch_x.to(device, non_blocking=True)
             batch_y = batch_y.to(device, non_blocking=True)
+            # For traj_size>1: batch_y is (batch, T); use slot-0 labels for the
+            # loss so the metric matches the averaged Yhat from forward().
+            batch_y_loss = batch_y[:, 0] if batch_y.dim() == 2 else batch_y
             if optimizer:
                 optimizer.zero_grad()
 
@@ -970,7 +1043,7 @@ def train_ete_model(model, train_dataset, test_dataset, alpha0, batch_size, max_
 
                 print("="*70 + "\n")
 
-            loss = criterion(output, batch_y)
+            loss = criterion(output, batch_y_loss)
 
             # CRITICAL FIX: Loss explosion detection
             if loss.item() > 10.0 or torch.isnan(loss) or torch.isinf(loss):
@@ -1043,8 +1116,8 @@ def train_ete_model(model, train_dataset, test_dataset, alpha0, batch_size, max_
             epoch_loss += loss.item()
             with torch.no_grad():
                 _, predicted = torch.max(output.data, 1)
-                epoch_total += batch_y.size(0)
-                epoch_correct += (predicted == batch_y).sum().item()
+                epoch_total += batch_y_loss.size(0)
+                epoch_correct += (predicted == batch_y_loss).sum().item()
 
         # ===== END OF EPOCH SUMMARY =====
         epoch_time = time.perf_counter() - epoch_start_time
@@ -1078,12 +1151,15 @@ def train_ete_model(model, train_dataset, test_dataset, alpha0, batch_size, max_
                 for ti, (tbx, tby) in enumerate(test_loader):
                     tbx = tbx.to(device, non_blocking=True)
                     tby = tby.to(device, non_blocking=True)
+                    # For traj_size>1: tby is (batch, T); use slot-0 for loss/kappa
+                    tby_loss = tby[:, 0] if tby.dim() == 2 else tby
                     actual_batch = tbx.size(0)
                     # Pad to batch_size if needed (RayBNN requires fixed batch size)
                     if actual_batch < batch_size:
                         if _pad_x is None:
                             _pad_x = torch.zeros(batch_size, *tbx.shape[1:], device=device)
-                            _pad_y = torch.zeros(batch_size, dtype=tby.dtype, device=device)
+                            # pad_y mirrors tby shape (may be (batch,) or (batch,T))
+                            _pad_y = torch.zeros(batch_size, *tby.shape[1:], dtype=tby.dtype, device=device)
                         _pad_x[:actual_batch] = tbx
                         _pad_y[:actual_batch] = tby
                         pad_x, pad_y = _pad_x, _pad_y
@@ -1093,12 +1169,12 @@ def train_ete_model(model, train_dataset, test_dataset, alpha0, batch_size, max_
                     else:
                         model.update_batch(ti)
                         tout = model(tbx, tby, verbose=False)
-                    test_loss_sum += criterion_eval(tout, tby).item()
-                    test_correct += (tout.argmax(dim=1) == tby).sum().item()
+                    test_loss_sum += criterion_eval(tout, tby_loss).item()
+                    test_correct += (tout.argmax(dim=1) == tby_loss).sum().item()
                     test_total += actual_batch
                     test_num_batches += 1
                     all_preds_epoch.append(tout.argmax(dim=1).cpu().numpy())
-                    all_labels_epoch.append(tby.cpu().numpy())
+                    all_labels_epoch.append(tby_loss.cpu().numpy())
 
             all_preds_epoch = np.concatenate(all_preds_epoch)
             all_labels_epoch = np.concatenate(all_labels_epoch)
@@ -1233,12 +1309,14 @@ def evaluate_model(model, test_dataset, batch_size=1000):
         for i, (batch_x, batch_y) in enumerate(test_loader):
             batch_x = batch_x.to(device, non_blocking=True)
             batch_y = batch_y.to(device, non_blocking=True)
+            # For traj_size>1: batch_y is (batch, T); use slot-0 for loss/kappa
+            batch_y_loss = batch_y[:, 0] if batch_y.dim() == 2 else batch_y
             actual_batch = batch_x.size(0)
             # Pad to batch_size if needed (RayBNN requires fixed batch size)
             if actual_batch < batch_size:
                 if _pad_x is None:
                     _pad_x = torch.zeros(batch_size, *batch_x.shape[1:], device=device)
-                    _pad_y = torch.zeros(batch_size, dtype=batch_y.dtype, device=device)
+                    _pad_y = torch.zeros(batch_size, *batch_y.shape[1:], dtype=batch_y.dtype, device=device)
                 _pad_x[:actual_batch] = batch_x
                 _pad_y[:actual_batch] = batch_y
                 pad_x, pad_y = _pad_x, _pad_y
@@ -1249,13 +1327,13 @@ def evaluate_model(model, test_dataset, batch_size=1000):
                 model.update_batch(i)
                 output = model(batch_x, batch_y, verbose=False)
 
-            loss = criterion(output, batch_y)
+            loss = criterion(output, batch_y_loss)
             total_loss += loss.item()
             num_batches += 1
 
             preds = output.argmax(dim=1)
             all_preds.append(preds.cpu().numpy())
-            all_labels.append(batch_y.cpu().numpy())
+            all_labels.append(batch_y_loss.cpu().numpy())
 
     inference_time = time.perf_counter() - inference_start
 
